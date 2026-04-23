@@ -1,0 +1,16 @@
+{
+    "name": "mygrc-monorepo",
+    "private": true,
+    "workspaces": [
+        "apps/*"
+    ],
+    "scripts": {
+        "dev:portal": "npm run dev --workspace=@mygrc/portal",
+        "dev:api": "npm run start:dev --prefix apps/api",
+        "dev": "concurrently \"npm run dev:api\" \"npm run dev:portal\"",
+        "build": "npm run build --workspaces --if-present"
+    },
+    "devDependencies": {
+        "concurrently": "^9.2.1"
+    }
+}

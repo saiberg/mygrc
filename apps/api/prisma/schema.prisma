@@ -1,0 +1,172 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Institution {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users           User[]
+  grcUsers        GrcUser[]
+  grcRoles        GrcRole[]
+  grcUserRoles    GrcUserRole[]
+  grcRiskRules    GrcRiskRule[]
+  grcAnalysisRuns GrcAnalysisRun[]
+  grcFindings     GrcFinding[]
+  grcImportLogs   GrcImportLog[]
+}
+
+model User {
+  id            String      @id @default(uuid())
+  email         String      @unique
+  name          String
+  password      String
+  institutionId String
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model GrcUser {
+  id_user       String      @id @default(uuid())
+  user_code     String      @unique
+  full_name     String
+  email         String
+  status        Boolean     @default(true)
+  source_system String?
+  institutionId String
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  created_at    DateTime    @default(now())
+  updated_at    DateTime    @updatedAt
+
+  roles    GrcUserRole[]
+  findings GrcFinding[]
+}
+
+model GrcRole {
+  id_role       String      @id @default(uuid())
+  role_name     String      @unique
+  role_desc     String?
+  process_area  String
+  criticality   String // e.g., "High", "Medium", "Low"
+  status        Boolean     @default(true)
+  institutionId String
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  created_at    DateTime    @default(now())
+
+  assignedUsers GrcUserRole[]
+}
+
+model GrcUserRole {
+  id_user_role  String    @id @default(uuid())
+  id_user       String
+  id_role       String
+  assigned_at   DateTime  @default(now())
+  valid_from    DateTime
+  valid_to      DateTime?
+  status        Boolean   @default(true)
+  institutionId String
+
+  user        GrcUser     @relation(fields: [id_user], references: [id_user])
+  role        GrcRole     @relation(fields: [id_role], references: [id_role])
+  institution Institution @relation(fields: [institutionId], references: [id])
+}
+
+model GrcRiskRule {
+  id_rule         String      @id @default(uuid())
+  rule_code       String      @unique
+  rule_name       String
+  rule_type       String // e.g., "Segregation of Duties", "Sensitive Access"
+  risk_level      String
+  description     String?
+  mitigation_text String?
+  active_flag     Boolean     @default(true)
+  institutionId   String
+  institution     Institution @relation(fields: [institutionId], references: [id])
+
+  items    GrcRuleItem[]
+  findings GrcFinding[]
+}
+
+model GrcRuleItem {
+  id_rule_item String @id @default(uuid())
+  id_rule      String
+  object_type  String // e.g., "Tcode", "AuthObject"
+  object_value String
+  seq_no       Int
+
+  rule GrcRiskRule @relation(fields: [id_rule], references: [id_rule])
+}
+
+model GrcAnalysisRun {
+  id_run        String      @id @default(uuid())
+  run_name      String
+  executed_by   String // User ID or System
+  run_date      DateTime    @default(now())
+  scope_type    String
+  scope_value   String
+  status        String // e.g., "Completed", "Failed", "Running"
+  institutionId String
+  institution   Institution @relation(fields: [institutionId], references: [id])
+
+  findings GrcFinding[]
+}
+
+model GrcFinding {
+  id_finding     String   @id @default(uuid())
+  id_run         String
+  id_user        String
+  id_rule        String
+  risk_level     String
+  finding_status String // e.g., "Open", "Mitigated", "False Positive"
+  evidence_text  String?
+  created_at     DateTime @default(now())
+  institutionId  String
+
+  run         GrcAnalysisRun @relation(fields: [id_run], references: [id_run])
+  user        GrcUser        @relation(fields: [id_user], references: [id_user])
+  rule        GrcRiskRule    @relation(fields: [id_rule], references: [id_rule])
+  mitigation  GrcMitigation?
+  institution Institution    @relation(fields: [institutionId], references: [id])
+}
+
+model GrcMitigation {
+  id_mitigation   String    @id @default(uuid())
+  id_finding      String    @unique
+  owner_name      String
+  approval_status String // e.g., "Pending", "Approved", "Rejected"
+  valid_until     DateTime?
+  comments        String?
+  created_at      DateTime  @default(now())
+
+  finding GrcFinding @relation(fields: [id_finding], references: [id_finding])
+}
+
+model GrcImportLog {
+  id_import     String      @id @default(uuid())
+  import_type   String // e.g., "Users", "Roles"
+  file_name     String
+  started_at    DateTime    @default(now())
+  finished_at   DateTime?
+  imported_by   String
+  total_rows    Int         @default(0)
+  ok_rows       Int         @default(0)
+  error_rows    Int         @default(0)
+  result_status String // e.g., "Success", "Partial", "Failed"
+  message_text  String?
+  institutionId String
+  institution   Institution @relation(fields: [institutionId], references: [id])
+}
