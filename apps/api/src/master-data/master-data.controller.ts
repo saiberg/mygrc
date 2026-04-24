@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Patch } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { MasterDataService } from './master-data.service';
 import { CreateGrcUserDto } from './dto/create-grc-user.dto';
@@ -23,6 +23,18 @@ export class MasterDataController {
     return this.masterDataService.createUser(dto);
   }
 
+  @ApiOperation({ summary: 'Update a GRC User' })
+  @Patch('users/:id')
+  updateUser(@Param('id') id: string, @Body() dto: Partial<CreateGrcUserDto>) {
+    return this.masterDataService.updateUser(id, dto);
+  }
+
+  @ApiOperation({ summary: 'Toggle GRC User status' })
+  @Patch('users/:id/toggle')
+  toggleUserStatus(@Param('id') id: string) {
+    return this.masterDataService.toggleUserStatus(id);
+  }
+
   @ApiOperation({ summary: 'Delete a GRC User' })
   @Delete('users/:id')
   deleteUser(@Param('id') id: string) {
@@ -40,6 +52,18 @@ export class MasterDataController {
   @Post('roles')
   createRole(@Body() dto: CreateGrcRoleDto) {
     return this.masterDataService.createRole(dto);
+  }
+
+  @ApiOperation({ summary: 'Update a GRC Role' })
+  @Patch('roles/:id')
+  updateRole(@Param('id') id: string, @Body() dto: Partial<CreateGrcRoleDto>) {
+    return this.masterDataService.updateRole(id, dto);
+  }
+
+  @ApiOperation({ summary: 'Toggle GRC Role status' })
+  @Patch('roles/:id/toggle')
+  toggleRoleStatus(@Param('id') id: string) {
+    return this.masterDataService.toggleRoleStatus(id);
   }
 
   @ApiOperation({ summary: 'Delete a GRC Role' })

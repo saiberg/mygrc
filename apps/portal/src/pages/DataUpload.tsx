@@ -4,16 +4,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const API_BASE = 'http://localhost:3000/api';
 
-type ImportType = 'users' | 'roles';
+type ImportType = 'users' | 'roles' | 'assignments' | 'risk-rules';
+type ImportMode = 'incremental' | 'replace';
 type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
 
 const IMPORT_TYPES: { value: ImportType; label: string; desc: string; columns: string[] }[] = [
   { value: 'users', label: 'GRC Users', desc: 'Upload user catalog from SAP, Oracle or any HR system.', columns: ['user_code', 'full_name', 'email', 'source_system', 'status'] },
   { value: 'roles', label: 'GRC Roles', desc: 'Upload role definitions with process area and criticality.', columns: ['role_name', 'process_area', 'criticality', 'role_desc'] },
+  { value: 'assignments', label: 'User assignments', desc: 'Map Users to Roles with validity dates.', columns: ['user_code', 'role_name', 'valid_from', 'valid_to'] },
+  { value: 'risk-rules', label: 'Risk Rules', desc: 'Upload SoD rules and sensitive access definitions.', columns: ['rule_code', 'rule_name', 'rule_type', 'risk_level', 'object_type', 'object_value'] },
 ];
 
 export const DataUpload = () => {
   const [importType, setImportType] = useState<ImportType>('users');
+  const [importMode, setImportMode] = useState<ImportMode>('incremental');
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [status, setStatus] = useState<UploadStatus>('idle');
@@ -36,7 +40,10 @@ export const DataUpload = () => {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch(`${API_BASE}/data-upload/${importType}`, { method: 'POST', body: formData });
+      const res = await fetch(`${API_BASE}/data-upload/${importType}?mode=${importMode}`, { 
+        method: 'POST', 
+        body: formData 
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Upload failed');
       setResult(data);
@@ -51,20 +58,33 @@ export const DataUpload = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-800">Data Upload</h1>
-        <p className="text-slate-500 text-sm mt-1">Import bulk GRC records from CSV or Excel files.</p>
+      <div className="flex justify-between items-end">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-800">Data Upload</h1>
+          <p className="text-slate-500 text-sm mt-1">Import bulk GRC records from CSV or Excel files.</p>
+        </div>
+        <div className="bg-slate-100 p-1 rounded-lg flex gap-1 border border-slate-200">
+          {(['incremental', 'replace'] as const).map(m => (
+            <button
+              key={m}
+              onClick={() => setImportMode(m)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md capitalize transition-all ${importMode === m ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              {m === 'incremental' ? 'Incremental' : 'Replace All'}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Step 1: Select Type */}
       <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
         <p className="text-sm font-semibold text-slate-700 mb-4">① Select Import Type</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {IMPORT_TYPES.map(type => (
             <button key={type.value} onClick={() => { setImportType(type.value); reset(); }}
               className={`p-4 rounded-xl border-2 text-left transition-all ${importType === type.value ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}>
               <p className={`font-semibold text-sm ${importType === type.value ? 'text-blue-700' : 'text-slate-700'}`}>{type.label}</p>
-              <p className="text-xs text-slate-500 mt-1">{type.desc}</p>
+              <p className="text-xs text-slate-500 mt-1 lines-clamp-2">{type.desc}</p>
             </button>
           ))}
         </div>

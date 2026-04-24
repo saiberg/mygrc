@@ -16,6 +16,7 @@ export class MasterDataService {
           include: { role: true },
         },
       },
+      orderBy: { created_at: 'desc' },
     });
   }
 
@@ -28,8 +29,24 @@ export class MasterDataService {
     return this.prisma.grcUser.create({
       data: {
         ...dto,
-        institutionId: '', // Satisfy Prisma TS Types. PrismaService Interceptor overrides this at runtime.
+        institutionId: '',
       }
+    });
+  }
+
+  async updateUser(id: string, dto: Partial<CreateGrcUserDto>) {
+    return this.prisma.grcUser.update({
+      where: { id_user: id },
+      data: dto,
+    });
+  }
+
+  async toggleUserStatus(id: string) {
+    const user = await this.prisma.grcUser.findUnique({ where: { id_user: id } });
+    if (!user) throw new NotFoundException('User not found');
+    return this.prisma.grcUser.update({
+      where: { id_user: id },
+      data: { status: !user.status },
     });
   }
 
@@ -41,7 +58,9 @@ export class MasterDataService {
 
   // --- ROLES ---
   async getRoles() {
-    return this.prisma.grcRole.findMany();
+    return this.prisma.grcRole.findMany({
+      orderBy: { created_at: 'desc' },
+    });
   }
 
   async createRole(dto: CreateGrcRoleDto) {
@@ -53,8 +72,24 @@ export class MasterDataService {
     return this.prisma.grcRole.create({
       data: {
         ...dto,
-        institutionId: '', // TS Dummy
+        institutionId: '',
       }
+    });
+  }
+
+  async updateRole(id: string, dto: Partial<CreateGrcRoleDto>) {
+    return this.prisma.grcRole.update({
+      where: { id_role: id },
+      data: dto,
+    });
+  }
+
+  async toggleRoleStatus(id: string) {
+    const role = await this.prisma.grcRole.findUnique({ where: { id_role: id } });
+    if (!role) throw new NotFoundException('Role not found');
+    return this.prisma.grcRole.update({
+      where: { id_role: id },
+      data: { status: !role.status },
     });
   }
 
@@ -71,11 +106,11 @@ export class MasterDataService {
         user: true,
         role: true,
       },
+      orderBy: { assigned_at: 'desc' },
     });
   }
 
   async assignRole(dto: AssignRoleDto) {
-    // Validate User & Role exist
     const user = await this.prisma.grcUser.findUnique({ where: { id_user: dto.id_user } });
     if (!user) throw new NotFoundException('User not found');
 
@@ -86,9 +121,9 @@ export class MasterDataService {
       data: {
         id_user: dto.id_user,
         id_role: dto.id_role,
-        valid_from: new Date(dto.valid_from),
+        valid_from: dto.valid_from ? new Date(dto.valid_from) : new Date(),
         valid_to: dto.valid_to ? new Date(dto.valid_to) : null,
-        institutionId: '', // TS Dummy
+        institutionId: '',
       }
     });
   }

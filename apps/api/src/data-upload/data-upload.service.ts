@@ -10,7 +10,7 @@ export class DataUploadService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async processUploadAndImport(type: string, file: Express.Multer.File, userId: string) {
+  async processUploadAndImport(type: string, file: Express.Multer.File, userId: string, mode: string = 'incremental') {
     const isCsv = file.mimetype === 'text/csv' || file.originalname.endsWith('.csv');
     const isExcel = file.originalname.endsWith('.xlsx') || file.originalname.endsWith('.xls');
 
@@ -25,7 +25,7 @@ export class DataUploadService {
         file_name: file.originalname,
         imported_by: userId,
         result_status: 'Processing',
-        institutionId: '', // intercepted correctly at runtime
+        institutionId: '', 
       },
     });
 
@@ -33,10 +33,27 @@ export class DataUploadService {
       // 2. Parse file synchronously into JSON array
       const rows = await this.parseFile(file, isCsv);
 
-      // 3. Process records (Synchronously for MVP)
+      // 3. Handle 'Replace' mode cleanup
+      if (mode === 'replace') {
+        this.logger.log(`Performing wipe for type: ${type} due to replacement mode`);
+        if (type === 'users') {
+          await this.prisma.grcUserRole.deleteMany({});
+          await this.prisma.grcUser.deleteMany({});
+        } else if (type === 'roles') {
+          await this.prisma.grcUserRole.deleteMany({});
+          await this.prisma.grcRole.deleteMany({});
+        } else if (type === 'assignments') {
+          await this.prisma.grcUserRole.deleteMany({});
+        } else if (type === 'risk-rules') {
+          await this.prisma.grcRuleItem.deleteMany({});
+          await this.prisma.grcRiskRule.deleteMany({});
+        }
+      }
+
+      // 4. Process records
       const { okRows, errorRows, message } = await this.processRows(type, rows);
 
-      // 4. Update Import Log successfully
+      // 5. Update Import Log successfully
       const finalStatus = errorRows > 0 ? (okRows > 0 ? 'Partial' : 'Failed') : 'Success';
       
       const finishedLog = await this.prisma.grcImportLog.update({
@@ -56,7 +73,6 @@ export class DataUploadService {
     } catch (error: any) {
       this.logger.error(`Import failed: ${error.message}`);
       
-      // Update Log with fatal error
       await this.prisma.grcImportLog.update({
         where: { id_import: importLog.id_import },
         data: {
@@ -82,34 +98,42 @@ export class DataUploadService {
           .on('error', (err: any) => reject(err));
       });
     } else {
-      // Parse Excel
       const workbook = xlsx.read(file.buffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
-      // Convert to array of objects
       return xlsx.utils.sheet_to_json(sheet);
     }
+  }
+
+  private validateEmail(email: string): boolean {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(email);
   }
 
   private async processRows(type: string, rows: any[]): Promise<{ okRows: number; errorRows: number; message: string }> {
     let okRows = 0;
     let errorRows = 0;
+    let errors: string[] = [];
 
-    for (const row of rows) {
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
       try {
         if (type === 'users') {
+          if (!row.user_code) throw new Error(`Row ${i+2}: User Code is mandatory`);
+          if (row.email && !this.validateEmail(row.email)) throw new Error(`Row ${i+2}: Invalid email format`);
+
           await this.prisma.grcUser.upsert({
-            where: { user_code: row.user_code?.toString() },
+            where: { user_code: row.user_code.toString() },
             update: {
-              full_name: row.full_name?.toString(),
-              email: row.email?.toString(),
-              status: row.status === 'true' || row.status === true,
+              full_name: row.full_name?.toString() || row.user_code.toString(),
+              email: row.email?.toString() || '',
+              status: row.status === 'true' || row.status === true || row.status === 1,
               source_system: row.source_system?.toString(),
             },
             create: {
-              user_code: row.user_code?.toString(),
-              full_name: row.full_name?.toString(),
-              email: row.email?.toString(),
+              user_code: row.user_code.toString(),
+              full_name: row.full_name?.toString() || row.user_code.toString(),
+              email: row.email?.toString() || '',
               status: true,
               source_system: row.source_system?.toString(),
               institutionId: '',
@@ -117,26 +141,81 @@ export class DataUploadService {
           });
         }
         else if (type === 'roles') {
+          if (!row.role_name) throw new Error(`Row ${i+2}: Role Name is mandatory`);
+
           await this.prisma.grcRole.upsert({
-            where: { role_name: row.role_name?.toString() },
+            where: { role_name: row.role_name.toString() },
             update: {
               role_desc: row.role_desc?.toString(),
-              process_area: row.process_area?.toString(),
-              criticality: row.criticality?.toString(),
+              process_area: row.process_area?.toString() || 'General',
+              criticality: row.criticality?.toString() || 'Medium',
             },
             create: {
-              role_name: row.role_name?.toString(),
+              role_name: row.role_name.toString(),
               role_desc: row.role_desc?.toString(),
-              process_area: row.process_area?.toString(),
-              criticality: row.criticality?.toString(),
+              process_area: row.process_area?.toString() || 'General',
+              criticality: row.criticality?.toString() || 'Medium',
               institutionId: '',
             },
           });
         }
-        // assignments logic can be similarly mapped looking up user_code to id_user...
+        else if (type === 'assignments') {
+          if (!row.user_code || !row.role_name) throw new Error(`Row ${i+2}: user_code and role_name are required`);
+
+          const user = await this.prisma.grcUser.findUnique({ where: { user_code: row.user_code.toString() } });
+          const role = await this.prisma.grcRole.findUnique({ where: { role_name: row.role_name.toString() } });
+
+          if (!user) throw new Error(`Row ${i+2}: User ${row.user_code} not found`);
+          if (!role) throw new Error(`Row ${i+2}: Role ${row.role_name} not found`);
+
+          await this.prisma.grcUserRole.create({
+            data: {
+              id_user: user.id_user,
+              id_role: role.id_role,
+              valid_from: row.valid_from ? new Date(row.valid_from) : new Date(),
+              valid_to: row.valid_to ? new Date(row.valid_to) : null,
+              institutionId: '',
+            }
+          });
+        }
+        else if (type === 'risk-rules') {
+          if (!row.rule_code || !row.rule_name) throw new Error(`Row ${i+2}: rule_code and rule_name are mandatory`);
+
+          const rule = await this.prisma.grcRiskRule.upsert({
+            where: { rule_code: row.rule_code.toString() },
+            update: {
+              rule_name: row.rule_name.toString(),
+              rule_type: row.rule_type?.toString() || 'Segregation of Duties',
+              risk_level: row.risk_level?.toString() || 'Medium',
+              description: row.description?.toString() || '',
+            },
+            create: {
+              rule_code: row.rule_code.toString(),
+              rule_name: row.rule_name.toString(),
+              rule_type: row.rule_type?.toString() || 'Segregation of Duties',
+              risk_level: row.risk_level?.toString() || 'Medium',
+              description: row.description?.toString() || '',
+              institutionId: '',
+            },
+          });
+
+          // If object info is provided, add it as a Rule Item
+          if (row.object_type && row.object_value) {
+            const itemCount = await this.prisma.grcRuleItem.count({ where: { id_rule: rule.id_rule } });
+            await this.prisma.grcRuleItem.create({
+              data: {
+                id_rule: rule.id_rule,
+                object_type: row.object_type.toString(),
+                object_value: row.object_value.toString(),
+                seq_no: itemCount + 1,
+              }
+            });
+          }
+        }
         okRows++;
-      } catch (err) {
-        this.logger.warn(`Row processing error: ${err}`);
+      } catch (err: any) {
+        this.logger.warn(`Row ${i+2} error: ${err.message}`);
+        errors.push(err.message);
         errorRows++;
       }
     }
@@ -144,7 +223,9 @@ export class DataUploadService {
     return {
       okRows,
       errorRows,
-      message: `Processed ${okRows} successfully, ${errorRows} failures.`
+      message: errors.length > 0 
+        ? `Processed ${okRows} successfully. Failures: ${errors.slice(0, 5).join('; ')}${errors.length > 5 ? '...' : ''}`
+        : `Processed ${okRows} successfully.`
     };
   }
 }
