@@ -34,7 +34,7 @@ export class DataUploadController {
       throw new BadRequestException('A file must be provided');
     }
 
-    const allowedTypes = ['users', 'roles', 'assignments', 'risk-rules'];
+    const allowedTypes = ['users', 'roles', 'assignments', 'risk-rules', 'rule-items', 'role-transactions'];
     if (!allowedTypes.includes(type)) {
       throw new BadRequestException(`Invalid import type. Allowed types are: ${allowedTypes.join(', ')}`);
     }

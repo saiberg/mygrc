@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { CheckSquare, AlertTriangle, CheckCircle2, Filter, ChevronDown, ShieldAlert, User, BookOpen, Calendar } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const API_BASE = 'http://localhost:3000/api';
+import { API_BASE } from '../config';
 
 const riskBadge = (level: string) => ({
   Critical: 'bg-rose-50 text-rose-700 border-rose-200',

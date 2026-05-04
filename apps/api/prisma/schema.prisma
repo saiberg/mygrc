@@ -22,6 +22,7 @@ model Institution {
   users           User[]
   grcUsers        GrcUser[]
   grcRoles        GrcRole[]
+  grcRoleTrxs     GrcRoleTrx[]
   grcUserRoles    GrcUserRole[]
   grcRiskRules    GrcRiskRule[]
   grcAnalysisRuns GrcAnalysisRun[]
@@ -44,7 +45,7 @@ model GrcUser {
   id_user       String      @id @default(uuid())
   user_code     String      @unique
   full_name     String
-  email         String
+  email         String?
   status        Boolean     @default(true)
   source_system String?
   institutionId String
@@ -60,7 +61,7 @@ model GrcRole {
   id_role       String      @id @default(uuid())
   role_name     String      @unique
   role_desc     String?
-  process_area  String
+  process_area  String?
   criticality   String // e.g., "High", "Medium", "Low"
   status        Boolean     @default(true)
   institutionId String
@@ -68,14 +69,28 @@ model GrcRole {
   created_at    DateTime    @default(now())
 
   assignedUsers GrcUserRole[]
+  roleTrxs      GrcRoleTrx[]
+}
+
+model GrcRoleTrx {
+  id_role_trx   String      @id @default(uuid())
+  role_name     String
+  object        String
+  field         String
+  transaction   String
+  institutionId String
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  created_at    DateTime    @default(now())
+
+  role          GrcRole     @relation(fields: [role_name], references: [role_name])
 }
 
 model GrcUserRole {
   id_user_role  String    @id @default(uuid())
   id_user       String
   id_role       String
-  assigned_at   DateTime  @default(now())
-  valid_from    DateTime
+  assigned_at   DateTime? @default(now())
+  valid_from    DateTime?
   valid_to      DateTime?
   status        Boolean   @default(true)
   institutionId String

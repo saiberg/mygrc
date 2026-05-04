@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { PlayCircle, Clock, CheckCircle2, XCircle, ChevronRight, Loader2, BarChart3, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const API_BASE = 'http://localhost:3000/api';
+import { API_BASE } from '../config';
 
 const statusColors: Record<string, string> = {
   Completed: 'bg-emerald-50 text-emerald-700 border-emerald-200',

@@ -32,6 +32,12 @@ export class RiskMatrixController {
     return this.riskMatrixService.toggleActive(id);
   }
 
+  @ApiOperation({ summary: 'Update an existing Risk Rule' })
+  @Patch('rules/:id')
+  updateRule(@Param('id') id: string, @Body() dto: CreateRiskRuleDto) {
+    return this.riskMatrixService.updateRule(id, dto);
+  }
+
   @ApiOperation({ summary: 'Delete a Risk Rule and its items' })
   @Delete('rules/:id')
   deleteRule(@Param('id') id: string) {

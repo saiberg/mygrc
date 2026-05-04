@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
-import { Users, Plus, Trash2, RefreshCw, Search, Briefcase, Link2, Edit3, Power, Clock } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Users, Plus, Trash2, RefreshCw, Search, Briefcase, Link2, Edit3, Clock, ScrollText, Filter } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const API_BASE = 'http://localhost:3000/api';
+import { API_BASE } from '../config';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -14,14 +14,16 @@ const itemVariants = {
 };
 
 // --- Tab Types ---
-type Tab = 'users' | 'roles' | 'assignments';
+type Tab = 'users' | 'roles' | 'assignments' | 'role-transactions';
 
 export const MasterData = () => {
   const [tab, setTab] = useState<Tab>('users');
   const [users, setUsers] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   const [assignments, setAssignments] = useState<any[]>([]);
+  const [roleTrxs, setRoleTrxs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [roleTrxFilter, setRoleTrxFilter] = useState('');
   const [search, setSearch] = useState('');
 
   // Editing state
@@ -29,8 +31,9 @@ export const MasterData = () => {
 
   // Form states
   const [userForm, setUserForm] = useState({ user_code: '', full_name: '', email: '', source_system: '' });
-  const [roleForm, setRoleForm] = useState({ role_name: '', role_desc: '', process_area: '', criticality: 'Medium' });
-  const [assignmentForm, setAssignmentForm] = useState({ id_user: '', id_role: '', valid_from: new Date().toISOString().split('T')[0], valid_to: '' });
+  const [roleForm, setRoleForm] = useState({ role_name: '', role_desc: '', process_area: '', criticality: 'Medium', status: true });
+  const [assignmentForm, setAssignmentForm] = useState({ id_user: '', id_role: '', assigned_at: new Date().toISOString().split('T')[0], valid_from: new Date().toISOString().split('T')[0], valid_to: '', status: true });
+  const [trxForm, setTrxForm] = useState({ role_name: '', object: '', field: '', transaction: '' });
 
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
@@ -38,14 +41,16 @@ export const MasterData = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [usersRes, rolesRes, assignRes] = await Promise.all([
+      const [usersRes, rolesRes, assignRes, trxRes] = await Promise.all([
         fetch(`${API_BASE}/master-data/users`),
         fetch(`${API_BASE}/master-data/roles`),
         fetch(`${API_BASE}/master-data/assignments`),
+        fetch(`${API_BASE}/master-data/role-transactions`),
       ]);
       setUsers(await usersRes.json());
       setRoles(await rolesRes.json());
       setAssignments(await assignRes.json());
+      setRoleTrxs(await trxRes.json());
     } finally {
       setLoading(false);
     }
@@ -141,6 +146,26 @@ export const MasterData = () => {
     }
   };
 
+  const handleCreateRoleTrx = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE}/master-data/role-transactions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(trxForm),
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      setTrxForm({ role_name: '', object: '', field: '', transaction: '' });
+      showMessage('ok', 'Transaction added.');
+      fetchData();
+    } catch (err: any) {
+      showMessage('err', err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleToggleStatus = async (type: 'users' | 'roles', id: string) => {
     try {
       const res = await fetch(`${API_BASE}/master-data/${type}/${id}/toggle`, { method: 'PATCH' });
@@ -157,14 +182,14 @@ export const MasterData = () => {
     if (type === 'users') {
       setUserForm({ user_code: item.user_code, full_name: item.full_name, email: item.email, source_system: item.source_system || '' });
     } else if (type === 'roles') {
-      setRoleForm({ role_name: item.role_name, process_area: item.process_area, criticality: item.criticality, role_desc: item.role_desc || '' });
+      setRoleForm({ role_name: item.role_name, process_area: item.process_area, criticality: item.criticality, role_desc: item.role_desc || '', status: item.status });
     }
   };
 
   const cancelEdit = () => {
     setEditing(null);
     setUserForm({ user_code: '', full_name: '', email: '', source_system: '' });
-    setRoleForm({ role_name: '', process_area: '', criticality: 'Medium', role_desc: '' });
+    setRoleForm({ role_name: '', process_area: '', criticality: 'Medium', role_desc: '', status: true });
   };
 
   const filteredUsers = users.filter(u =>
@@ -179,14 +204,18 @@ export const MasterData = () => {
     a.role.role_name?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const criticalityBadge = (c: string) => {
-    const map: Record<string, string> = {
-      High: 'bg-rose-50 text-rose-600 border-rose-200',
-      Medium: 'bg-amber-50 text-amber-600 border-amber-200',
-      Low: 'bg-emerald-50 text-emerald-600 border-emerald-200',
-    };
-    return map[c] || 'bg-slate-100 text-slate-500 border-slate-200';
-  };
+  // Role transactions: two-level filter — first by roleTrxFilter (role dropdown), then by search text
+  const filteredRoleTrxs = useMemo(() => {
+    return roleTrxs.filter(t => {
+      const roleMatch = !roleTrxFilter || t.role_name === roleTrxFilter;
+      const searchMatch = !search ||
+        t.role_name?.toLowerCase().includes(search.toLowerCase()) ||
+        t.object?.toLowerCase().includes(search.toLowerCase()) ||
+        t.field?.toLowerCase().includes(search.toLowerCase()) ||
+        t.transaction?.toLowerCase().includes(search.toLowerCase());
+      return roleMatch && searchMatch;
+    });
+  }, [roleTrxs, roleTrxFilter, search]);
 
   const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString() : '—';
 
@@ -220,9 +249,10 @@ export const MasterData = () => {
           { id: 'users', label: 'Users', icon: Users, count: users.length },
           { id: 'roles', label: 'Roles', icon: Briefcase, count: roles.length },
           { id: 'assignments', label: 'Assignments', icon: Link2, count: assignments.length },
+          { id: 'role-transactions', label: 'Role Trx', icon: ScrollText, count: roleTrxs.length },
         ].map(t => (
-          <button key={t.id} onClick={() => { setTab(t.id as Tab); cancelEdit(); }}
-            className={`px-5 py-2.5 text-sm font-medium capitalize transition-all border-b-2 -mb-px flex items-center gap-2 ${tab === t.id ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+          <button key={t.id} onClick={() => { setTab(t.id as Tab); cancelEdit(); setSearch(''); setRoleTrxFilter(''); }}
+            className={`px-5 py-2.5 text-sm font-medium transition-all border-b-2 -mb-px flex items-center gap-2 ${tab === t.id ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
             <t.icon className="w-4 h-4" /> {t.label} ({t.count})
           </button>
         ))}
@@ -235,7 +265,7 @@ export const MasterData = () => {
             <h3 className="font-semibold text-slate-800 mb-4 flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <Plus className="w-4 h-4 text-blue-600" />
-                {editing ? `Edit ${editing.type === 'users' ? 'User' : 'Role'}` : `New ${tab === 'users' ? 'User' : tab === 'roles' ? 'Role' : 'Assignment'}`}
+                {editing ? `Edit ${editing.type === 'users' ? 'User' : 'Role'}` : `New ${tab === 'users' ? 'User' : tab === 'roles' ? 'Role' : tab === 'assignments' ? 'Assignment' : 'Transaction'}`}
               </span>
               {editing && (
                 <button onClick={cancelEdit} className="text-xs text-slate-400 hover:text-rose-500">Cancel</button>
@@ -247,7 +277,7 @@ export const MasterData = () => {
                 {[
                   { label: 'User Code *', key: 'user_code', placeholder: 'e.g. USR001', disabled: !!editing },
                   { label: 'Full Name *', key: 'full_name', placeholder: 'e.g. John Smith' },
-                  { label: 'Email *', key: 'email', placeholder: 'john@company.com' },
+                  { label: 'Email', key: 'email', placeholder: 'john@company.com' },
                   { label: 'Source System', key: 'source_system', placeholder: 'e.g. SAP ECC' },
                 ].map(field => (
                   <div key={field.key}>
@@ -270,7 +300,7 @@ export const MasterData = () => {
               <form onSubmit={handleCreateOrUpdateRole} className="space-y-3">
                 {[
                   { label: 'Role Name *', key: 'role_name', placeholder: 'e.g. FI_POSTING', disabled: !!editing },
-                  { label: 'Process Area *', key: 'process_area', placeholder: 'e.g. Finance' },
+                  { label: 'Process Area', key: 'process_area', placeholder: 'e.g. Finance' },
                   { label: 'Description', key: 'role_desc', placeholder: 'Brief description' },
                 ].map(field => (
                   <div key={field.key}>
@@ -293,12 +323,19 @@ export const MasterData = () => {
                     <option>Low</option>
                   </select>
                 </div>
+                <div className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <label className="text-xs font-medium text-slate-600">Status</label>
+                  <button type="button" onClick={() => setRoleForm(p => ({ ...p, status: !p.status }))}
+                    className={`px-3 py-1 rounded text-[11px] font-bold uppercase transition-all ${roleForm.status ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-slate-200 text-slate-500 border border-slate-300'}`}>
+                    {roleForm.status ? 'Active' : 'Inactive'}
+                  </button>
+                </div>
                 <button type="submit" disabled={submitting}
                   className="w-full mt-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors disabled:opacity-50">
                   {submitting ? 'Saving...' : editing ? 'Update Role' : 'Create Role'}
                 </button>
               </form>
-            ) : (
+            ) : tab === 'assignments' ? (
               <form onSubmit={handleAssignRole} className="space-y-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-500 mb-1">User *</label>
@@ -317,7 +354,12 @@ export const MasterData = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Valid From *</label>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Assigned At</label>
+                  <input type="date" value={assignmentForm.assigned_at} onChange={e => setAssignmentForm(p => ({ ...p, assigned_at: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition bg-white text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Valid From</label>
                   <input type="date" value={assignmentForm.valid_from} onChange={e => setAssignmentForm(p => ({ ...p, valid_from: e.target.value }))}
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition bg-white text-sm" />
                 </div>
@@ -326,9 +368,43 @@ export const MasterData = () => {
                   <input type="date" value={assignmentForm.valid_to} onChange={e => setAssignmentForm(p => ({ ...p, valid_to: e.target.value }))}
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition bg-white text-sm" />
                 </div>
+                <div className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <label className="text-xs font-medium text-slate-600">Status</label>
+                  <button type="button" onClick={() => setAssignmentForm(p => ({ ...p, status: !p.status }))}
+                    className={`px-3 py-1 rounded text-[11px] font-bold uppercase transition-all ${assignmentForm.status ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-slate-200 text-slate-500 border border-slate-300'}`}>
+                    {assignmentForm.status ? 'Active' : 'Inactive'}
+                  </button>
+                </div>
                 <button type="submit" disabled={submitting || !assignmentForm.id_user || !assignmentForm.id_role}
                   className="w-full mt-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors disabled:opacity-50">
                   {submitting ? 'Assigning...' : 'Assign Role'}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleCreateRoleTrx} className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Role *</label>
+                  <select value={trxForm.role_name} onChange={e => setTrxForm(p => ({ ...p, role_name: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition bg-white text-sm">
+                    <option value="">Select role...</option>
+                    {roles.map(r => <option key={r.id_role} value={r.role_name}>{r.role_name}</option>)}
+                  </select>
+                </div>
+                {[
+                  { label: 'Object *', key: 'object', placeholder: 'e.g. F_BKPF_BUK' },
+                  { label: 'Field *', key: 'field', placeholder: 'e.g. ACTVT' },
+                  { label: 'Transaction *', key: 'transaction', placeholder: 'e.g. FB01' },
+                ].map(f => (
+                  <div key={f.key}>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">{f.label}</label>
+                    <input placeholder={f.placeholder} value={(trxForm as any)[f.key]}
+                      onChange={e => setTrxForm(p => ({ ...p, [f.key]: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 placeholder-slate-300 transition" />
+                  </div>
+                ))}
+                <button type="submit" disabled={submitting || !trxForm.role_name || !trxForm.object || !trxForm.field || !trxForm.transaction}
+                  className="w-full mt-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors disabled:opacity-50">
+                  {submitting ? 'Saving...' : 'Add Transaction'}
                 </button>
               </form>
             )}
@@ -337,7 +413,7 @@ export const MasterData = () => {
 
         {/* Table Area */}
         <motion.div variants={itemVariants} className="xl:col-span-3 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden min-h-[500px]">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+          <div className="p-4 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
             <div className="relative flex-1 max-w-md">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -347,7 +423,17 @@ export const MasterData = () => {
                 className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 placeholder-slate-300 transition bg-white"
               />
             </div>
-            {loading && <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />}
+            {tab === 'role-transactions' && (
+              <div className="relative">
+                <Filter className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <select value={roleTrxFilter} onChange={e => setRoleTrxFilter(e.target.value)}
+                  className="pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 bg-white">
+                  <option value="">All roles</option>
+                  {roles.map(r => <option key={r.id_role} value={r.role_name}>{r.role_name}</option>)}
+                </select>
+              </div>
+            )}
+            {loading && <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin ml-auto" />}
           </div>
 
           <div className="overflow-x-auto">
@@ -378,9 +464,19 @@ export const MasterData = () => {
                     <>
                       <th className="px-4 py-4 font-medium">User</th>
                       <th className="px-4 py-4 font-medium">Role</th>
+                      <th className="px-4 py-4 font-medium">Assigned At</th>
                       <th className="px-4 py-4 font-medium">Valid From</th>
                       <th className="px-4 py-4 font-medium">Valid To</th>
                       <th className="px-4 py-4 font-medium text-center">Status</th>
+                      <th className="px-4 py-4"></th>
+                    </>
+                  )}
+                  {tab === 'role-transactions' && (
+                    <>
+                      <th className="px-4 py-4 font-medium">Role</th>
+                      <th className="px-4 py-4 font-medium">Object</th>
+                      <th className="px-4 py-4 font-medium">Field</th>
+                      <th className="px-4 py-4 font-medium">Transaction</th>
                       <th className="px-4 py-4"></th>
                     </>
                   )}
@@ -456,7 +552,7 @@ export const MasterData = () => {
                 )}
                 {tab === 'assignments' && (
                   filteredAssignments.length === 0 ? (
-                    <tr><td colSpan={6} className="text-center py-20 text-slate-400">No assignments found.</td></tr>
+                    <tr><td colSpan={7} className="text-center py-20 text-slate-400">No assignments found.</td></tr>
                   ) : filteredAssignments.map(a => (
                     <tr key={a.id_user_role} className="hover:bg-slate-50/80 transition-colors group">
                       <td className="px-4 py-4">
@@ -467,15 +563,39 @@ export const MasterData = () => {
                         <div className="font-medium text-slate-700">{a.role.role_name}</div>
                         <div className="text-[10px] text-slate-400">{a.role.process_area}</div>
                       </td>
+                      <td className="px-4 py-4 text-slate-600 text-xs">{formatDate(a.assigned_at)}</td>
                       <td className="px-4 py-4 text-slate-600 text-xs">{formatDate(a.valid_from)}</td>
                       <td className="px-4 py-4 text-slate-600 text-xs">{formatDate(a.valid_to)}</td>
                       <td className="px-4 py-4 text-center">
-                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${a.status ? 'text-emerald-600' : 'text-slate-400'}`}>
-                          {a.status ? 'Valid' : 'Expired'}
+                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${a.status ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-100 text-slate-400 border border-slate-200'}`}>
+                          {a.status ? 'Active' : 'Inactive'}
                         </span>
                       </td>
                       <td className="px-4 py-4 text-right pr-6">
                         <button onClick={() => handleDelete('assignments', a.id_user_role)} className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+                {tab === 'role-transactions' && (
+                  filteredRoleTrxs.length === 0 ? (
+                    <tr><td colSpan={5} className="text-center py-20 text-slate-400">No transactions found.</td></tr>
+                  ) : filteredRoleTrxs.map(t => (
+                    <tr key={t.id_role_trx} className="hover:bg-slate-50/80 transition-colors group">
+                      <td className="px-4 py-4">
+                        <div className="font-mono text-xs font-semibold text-slate-700">{t.role_name}</div>
+                        {t.role && <div className="text-[10px] text-slate-400">{t.role.process_area}</div>}
+                      </td>
+                      <td className="px-4 py-4 font-mono text-xs text-blue-700 bg-blue-50/30">{t.object}</td>
+                      <td className="px-4 py-4 font-mono text-xs text-slate-600">{t.field}</td>
+                      <td className="px-4 py-4">
+                        <span className="px-2 py-1 bg-slate-100 text-slate-700 text-xs font-mono rounded">{t.transaction}</span>
+                      </td>
+                      <td className="px-4 py-4 text-right pr-6">
+                        <button onClick={() => handleDelete('role-transactions', t.id_role_trx)}
+                          className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all opacity-0 group-hover:opacity-100">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </td>

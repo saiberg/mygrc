@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsDateString, IsOptional } from 'class-validator';
+import { IsNotEmpty, IsString, IsDateString, IsOptional, IsBoolean } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class AssignRoleDto {
@@ -12,13 +12,23 @@ export class AssignRoleDto {
   @IsString()
   id_role: string;
 
-  @ApiProperty({ description: 'Date when the assignment starts being active' })
-  @IsNotEmpty()
+  @ApiPropertyOptional({ description: 'Date when the assignment was made' })
+  @IsOptional()
   @IsDateString()
-  valid_from: string;
+  assigned_at?: string;
+
+  @ApiPropertyOptional({ description: 'Date when the assignment starts being active' })
+  @IsOptional()
+  @IsDateString()
+  valid_from?: string;
 
   @ApiPropertyOptional({ description: 'End date of the assignment, if any' })
   @IsOptional()
   @IsDateString()
   valid_to?: string;
+
+  @ApiPropertyOptional({ description: 'Whether the assignment is active' })
+  @IsOptional()
+  @IsBoolean()
+  status?: boolean;
 }

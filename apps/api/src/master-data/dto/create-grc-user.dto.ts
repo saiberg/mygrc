@@ -12,10 +12,10 @@ export class CreateGrcUserDto {
   @IsString()
   full_name: string;
 
-  @ApiProperty({ description: 'The associated email address' })
-  @IsNotEmpty()
+  @ApiPropertyOptional({ description: 'The associated email address' })
+  @IsOptional()
   @IsEmail()
-  email: string;
+  email?: string;
 
   @ApiPropertyOptional({ description: 'The originating source system' })
   @IsOptional()

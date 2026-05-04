@@ -90,4 +90,29 @@ export class MasterDataController {
   removeAssignment(@Param('id') id: string) {
     return this.masterDataService.removeAssignment(id);
   }
+
+  // --- ROLE TRANSACTIONS ---
+  @ApiOperation({ summary: 'List all Role Transactions' })
+  @Get('role-transactions')
+  getRoleTrxs() {
+    return this.masterDataService.getRoleTrxs();
+  }
+
+  @ApiOperation({ summary: 'List transactions for a specific role' })
+  @Get('role-transactions/by-role/:roleName')
+  getRoleTrxsByRole(@Param('roleName') roleName: string) {
+    return this.masterDataService.getRoleTrxsByRole(roleName);
+  }
+
+  @ApiOperation({ summary: 'Create a new Role Transaction' })
+  @Post('role-transactions')
+  createRoleTrx(@Body() dto: { role_name: string; object: string; field: string; transaction: string }) {
+    return this.masterDataService.createRoleTrx(dto);
+  }
+
+  @ApiOperation({ summary: 'Delete a Role Transaction' })
+  @Delete('role-transactions/:id')
+  deleteRoleTrx(@Param('id') id: string) {
+    return this.masterDataService.deleteRoleTrx(id);
+  }
 }

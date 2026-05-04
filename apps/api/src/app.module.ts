@@ -12,6 +12,7 @@ import { DataUploadModule } from './data-upload/data-upload.module';
 import { RiskMatrixModule } from './risk-matrix/risk-matrix.module';
 import { AnalysisEngineModule } from './analysis-engine/analysis-engine.module';
 import { FindingsModule } from './findings/findings.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { FindingsModule } from './findings/findings.module';
     RiskMatrixModule,
     AnalysisEngineModule,
     FindingsModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [

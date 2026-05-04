@@ -12,10 +12,10 @@ export class CreateGrcRoleDto {
   @IsString()
   role_desc?: string;
 
-  @ApiProperty({ description: 'Business Area or Process it belongs to' })
-  @IsNotEmpty()
+  @ApiPropertyOptional({ description: 'Business Area or Process it belongs to' })
+  @IsOptional()
   @IsString()
-  process_area: string;
+  process_area?: string;
 
   @ApiProperty({ description: 'Risk Criticality Level', example: 'High' })
   @IsNotEmpty()

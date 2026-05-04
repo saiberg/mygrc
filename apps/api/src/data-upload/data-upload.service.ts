@@ -47,6 +47,10 @@ export class DataUploadService {
         } else if (type === 'risk-rules') {
           await this.prisma.grcRuleItem.deleteMany({});
           await this.prisma.grcRiskRule.deleteMany({});
+        } else if (type === 'rule-items') {
+          await this.prisma.grcRuleItem.deleteMany({});
+        } else if (type === 'role-transactions') {
+          await this.prisma.grcRoleTrx.deleteMany({});
         }
       }
 
@@ -126,16 +130,16 @@ export class DataUploadService {
             where: { user_code: row.user_code.toString() },
             update: {
               full_name: row.full_name?.toString() || row.user_code.toString(),
-              email: row.email?.toString() || '',
+              email: row.email?.toString() || null,
               status: row.status === 'true' || row.status === true || row.status === 1,
-              source_system: row.source_system?.toString(),
+              source_system: row.source_system?.toString() || null,
             },
             create: {
               user_code: row.user_code.toString(),
               full_name: row.full_name?.toString() || row.user_code.toString(),
-              email: row.email?.toString() || '',
+              email: row.email?.toString() || null,
               status: true,
-              source_system: row.source_system?.toString(),
+              source_system: row.source_system?.toString() || null,
               institutionId: '',
             },
           });
@@ -146,15 +150,17 @@ export class DataUploadService {
           await this.prisma.grcRole.upsert({
             where: { role_name: row.role_name.toString() },
             update: {
-              role_desc: row.role_desc?.toString(),
-              process_area: row.process_area?.toString() || 'General',
+              role_desc: row.role_desc?.toString() || null,
+              process_area: row.process_area?.toString() || null,
               criticality: row.criticality?.toString() || 'Medium',
+              status: row.status !== undefined ? (row.status === 'true' || row.status === true || row.status === 1 || row.status === '1') : undefined,
             },
             create: {
               role_name: row.role_name.toString(),
-              role_desc: row.role_desc?.toString(),
-              process_area: row.process_area?.toString() || 'General',
+              role_desc: row.role_desc?.toString() || null,
+              process_area: row.process_area?.toString() || null,
               criticality: row.criticality?.toString() || 'Medium',
+              status: row.status !== undefined ? (row.status === 'true' || row.status === true || row.status === 1 || row.status === '1') : true,
               institutionId: '',
             },
           });
@@ -172,8 +178,10 @@ export class DataUploadService {
             data: {
               id_user: user.id_user,
               id_role: role.id_role,
-              valid_from: row.valid_from ? new Date(row.valid_from) : new Date(),
+              assigned_at: row.assigned_at ? new Date(row.assigned_at) : undefined, // Let DB default work
+              valid_from: row.valid_from ? new Date(row.valid_from) : null,
               valid_to: row.valid_to ? new Date(row.valid_to) : null,
+              status: row.status !== undefined ? (row.status === 'true' || row.status === true || row.status === 1 || row.status === '1') : true,
               institutionId: '',
             }
           });
@@ -181,33 +189,86 @@ export class DataUploadService {
         else if (type === 'risk-rules') {
           if (!row.rule_code || !row.rule_name) throw new Error(`Row ${i+2}: rule_code and rule_name are mandatory`);
 
-          const rule = await this.prisma.grcRiskRule.upsert({
+          await this.prisma.grcRiskRule.upsert({
             where: { rule_code: row.rule_code.toString() },
             update: {
               rule_name: row.rule_name.toString(),
               rule_type: row.rule_type?.toString() || 'Segregation of Duties',
               risk_level: row.risk_level?.toString() || 'Medium',
-              description: row.description?.toString() || '',
+              description: row.description?.toString() || null,
+              mitigation_text: row.mitigation_text?.toString() || null,
+              active_flag: row.active_flag !== undefined
+                ? (row.active_flag === 'true' || row.active_flag === true || row.active_flag === 1 || row.active_flag === '1')
+                : undefined,
             },
             create: {
               rule_code: row.rule_code.toString(),
               rule_name: row.rule_name.toString(),
               rule_type: row.rule_type?.toString() || 'Segregation of Duties',
               risk_level: row.risk_level?.toString() || 'Medium',
-              description: row.description?.toString() || '',
+              description: row.description?.toString() || null,
+              mitigation_text: row.mitigation_text?.toString() || null,
+              active_flag: row.active_flag !== undefined
+                ? (row.active_flag === 'true' || row.active_flag === true || row.active_flag === 1 || row.active_flag === '1')
+                : true,
               institutionId: '',
             },
           });
+        }
+        else if (type === 'rule-items') {
+          if (!row.rule_code || !row.object_type || !row.object_value) {
+            throw new Error(`Row ${i+2}: rule_code, object_type and object_value are mandatory`);
+          }
 
-          // If object info is provided, add it as a Rule Item
-          if (row.object_type && row.object_value) {
-            const itemCount = await this.prisma.grcRuleItem.count({ where: { id_rule: rule.id_rule } });
+          const rule = await this.prisma.grcRiskRule.findUnique({
+            where: { rule_code: row.rule_code.toString() },
+          });
+          if (!rule) throw new Error(`Row ${i+2}: Risk Rule '${row.rule_code}' not found — upload the rule first`);
+
+          const seqNo = row.seq_no ? parseInt(row.seq_no.toString(), 10) : (
+            await this.prisma.grcRuleItem.count({ where: { id_rule: rule.id_rule } }) + 1
+          );
+
+          // Incremental: skip if identical item already exists
+          const existing = await this.prisma.grcRuleItem.findFirst({
+            where: { id_rule: rule.id_rule, object_type: row.object_type.toString(), object_value: row.object_value.toString() },
+          });
+          if (!existing) {
             await this.prisma.grcRuleItem.create({
               data: {
                 id_rule: rule.id_rule,
                 object_type: row.object_type.toString(),
                 object_value: row.object_value.toString(),
-                seq_no: itemCount + 1,
+                seq_no: seqNo,
+              },
+            });
+          }
+        }
+        else if (type === 'role-transactions') {
+          if (!row.role_name || !row.object || !row.field || !row.transaction) {
+            throw new Error(`Row ${i+2}: role_name, object, field, and transaction are required`);
+          }
+
+          const role = await this.prisma.grcRole.findUnique({ where: { role_name: row.role_name.toString() } });
+          if (!role) throw new Error(`Row ${i+2}: Role ${row.role_name} not found`);
+
+          const existingTrx = await this.prisma.grcRoleTrx.findFirst({
+            where: {
+              role_name: row.role_name.toString(),
+              object: row.object.toString(),
+              field: row.field.toString(),
+              transaction: row.transaction.toString(),
+            }
+          });
+
+          if (!existingTrx) {
+            await this.prisma.grcRoleTrx.create({
+              data: {
+                role_name: row.role_name.toString(),
+                object: row.object.toString(),
+                field: row.field.toString(),
+                transaction: row.transaction.toString(),
+                institutionId: '',
               }
             });
           }

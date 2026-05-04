@@ -2,17 +2,19 @@ import { useState, useRef } from 'react';
 import { UploadCloud, FileText, CheckCircle2, XCircle, AlertCircle, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const API_BASE = 'http://localhost:3000/api';
+import { API_BASE } from '../config';
 
-type ImportType = 'users' | 'roles' | 'assignments' | 'risk-rules';
+type ImportType = 'users' | 'roles' | 'assignments' | 'risk-rules' | 'rule-items' | 'role-transactions';
 type ImportMode = 'incremental' | 'replace';
 type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
 
 const IMPORT_TYPES: { value: ImportType; label: string; desc: string; columns: string[] }[] = [
   { value: 'users', label: 'GRC Users', desc: 'Upload user catalog from SAP, Oracle or any HR system.', columns: ['user_code', 'full_name', 'email', 'source_system', 'status'] },
-  { value: 'roles', label: 'GRC Roles', desc: 'Upload role definitions with process area and criticality.', columns: ['role_name', 'process_area', 'criticality', 'role_desc'] },
-  { value: 'assignments', label: 'User assignments', desc: 'Map Users to Roles with validity dates.', columns: ['user_code', 'role_name', 'valid_from', 'valid_to'] },
-  { value: 'risk-rules', label: 'Risk Rules', desc: 'Upload SoD rules and sensitive access definitions.', columns: ['rule_code', 'rule_name', 'rule_type', 'risk_level', 'object_type', 'object_value'] },
+  { value: 'roles', label: 'GRC Roles', desc: 'Upload role definitions with process area and criticality.', columns: ['role_name', 'process_area', 'criticality', 'role_desc', 'status'] },
+  { value: 'assignments', label: 'User assignments', desc: 'Map Users to Roles with validity dates.', columns: ['user_code', 'role_name', 'valid_from', 'valid_to', 'assigned_at', 'status'] },
+  { value: 'risk-rules', label: 'Risk Rules', desc: 'Upload SoD rules and sensitive access definitions.', columns: ['rule_code', 'rule_name', 'rule_type', 'risk_level', 'description', 'mitigation_text', 'active_flag'] },
+  { value: 'rule-items', label: 'Rule Items', desc: 'Upload objects/transactions linked to a risk rule via rule_code.', columns: ['rule_code', 'object_type', 'object_value', 'seq_no'] },
+  { value: 'role-transactions', label: 'Role Transactions', desc: 'Upload transactions associated with roles.', columns: ['role_name', 'object', 'field', 'transaction'] },
 ];
 
 export const DataUpload = () => {
@@ -79,12 +81,12 @@ export const DataUpload = () => {
       {/* Step 1: Select Type */}
       <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
         <p className="text-sm font-semibold text-slate-700 mb-4">① Select Import Type</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7 gap-3">
           {IMPORT_TYPES.map(type => (
             <button key={type.value} onClick={() => { setImportType(type.value); reset(); }}
               className={`p-4 rounded-xl border-2 text-left transition-all ${importType === type.value ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}>
               <p className={`font-semibold text-sm ${importType === type.value ? 'text-blue-700' : 'text-slate-700'}`}>{type.label}</p>
-              <p className="text-xs text-slate-500 mt-1 lines-clamp-2">{type.desc}</p>
+              <p className="text-xs text-slate-500 mt-1 line-clamp-2">{type.desc}</p>
             </button>
           ))}
         </div>

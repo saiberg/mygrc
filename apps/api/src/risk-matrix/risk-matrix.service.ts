@@ -44,6 +44,30 @@ export class RiskMatrixService {
     });
   }
 
+  async updateRule(id_rule: string, dto: CreateRiskRuleDto) {
+    const rule = await this.prisma.grcRiskRule.findUnique({ where: { id_rule } });
+    if (!rule) throw new NotFoundException(`Rule ${id_rule} not found`);
+
+    const { items, ...ruleData } = dto;
+
+    return this.prisma.$transaction(async (tx) => {
+      if (items) {
+        await tx.grcRuleItem.deleteMany({ where: { id_rule } });
+      }
+
+      return tx.grcRiskRule.update({
+        where: { id_rule },
+        data: {
+          ...ruleData,
+          items: items && items.length > 0
+            ? { create: items.map(item => ({ ...item })) }
+            : undefined,
+        },
+        include: { items: true },
+      });
+    });
+  }
+
   async toggleActive(id_rule: string) {
     const rule = await this.prisma.grcRiskRule.findUnique({ where: { id_rule } });
     if (!rule) throw new NotFoundException(`Rule ${id_rule} not found`);

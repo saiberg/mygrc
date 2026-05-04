@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { ShieldAlert, Plus, Trash2, RefreshCw, ChevronDown, ChevronRight, ToggleLeft, ToggleRight, Tag } from 'lucide-react';
+import { ShieldAlert, Plus, Trash2, RefreshCw, ChevronDown, ChevronRight, ToggleLeft, ToggleRight, Tag, Edit3 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const API_BASE = 'http://localhost:3000/api';
+import { API_BASE } from '../config';
 
 const RISK_LEVELS = ['Critical', 'High', 'Medium', 'Low'];
 const RULE_TYPES = ['Segregation of Duties', 'Sensitive Access', 'Critical Action', 'Critical Permission'];
@@ -24,6 +24,7 @@ const DEFAULT_RULE_FORM = {
   risk_level: 'High',
   description: '',
   mitigation_text: '',
+  active_flag: true,
 };
 
 const DEFAULT_ITEM = { object_type: 'Tcode', object_value: '', seq_no: 1 };
@@ -33,6 +34,7 @@ export const RiskMatrix = () => {
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(DEFAULT_RULE_FORM);
   const [items, setItems] = useState([{ ...DEFAULT_ITEM }]);
   const [submitting, setSubmitting] = useState(false);
@@ -63,22 +65,47 @@ export const RiskMatrix = () => {
         ...form,
         items: items.filter(i => i.object_value.trim() !== ''),
       };
-      const res = await fetch(`${API_BASE}/risk-matrix/rules`, {
-        method: 'POST',
+      const url = editingId ? `${API_BASE}/risk-matrix/rules/${editingId}` : `${API_BASE}/risk-matrix/rules`;
+      const method = editingId ? 'PATCH' : 'POST';
+      
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error((await res.json()).message);
-      setForm(DEFAULT_RULE_FORM);
-      setItems([{ ...DEFAULT_ITEM }]);
-      setShowForm(false);
-      showMsg('ok', 'Rule created successfully.');
+      
+      cancelEdit();
+      showMsg('ok', editingId ? 'Rule updated.' : 'Rule created.');
       fetchRules();
     } catch (err: any) {
       showMsg('err', err.message);
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const startEdit = (rule: any) => {
+    setEditingId(rule.id_rule);
+    setForm({
+      rule_code: rule.rule_code,
+      rule_name: rule.rule_name,
+      rule_type: rule.rule_type,
+      risk_level: rule.risk_level,
+      description: rule.description || '',
+      mitigation_text: rule.mitigation_text || '',
+      active_flag: rule.active_flag,
+    });
+    setItems(rule.items?.length > 0 ? rule.items.map((it: any) => ({ ...it })) : [{ ...DEFAULT_ITEM }]);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setForm(DEFAULT_RULE_FORM);
+    setItems([{ ...DEFAULT_ITEM }]);
+    setShowForm(false);
   };
 
   const handleToggle = async (id: string) => {
@@ -137,7 +164,7 @@ export const RiskMatrix = () => {
             className="overflow-hidden">
             <div className="bg-white rounded-xl border border-blue-200 shadow-sm p-6">
               <h3 className="font-semibold text-slate-800 mb-5 flex items-center gap-2">
-                <ShieldAlert className="w-5 h-5 text-blue-600" /> Define New Risk Rule
+                <ShieldAlert className="w-5 h-5 text-blue-600" /> {editingId ? 'Update Risk Rule' : 'Define New Risk Rule'}
               </h3>
               <form onSubmit={handleSubmit} className="space-y-5">
                 {/* Rule base fields */}
@@ -179,6 +206,13 @@ export const RiskMatrix = () => {
                       rows={2} placeholder="Recommended mitigation actions..."
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 placeholder-slate-300 resize-none transition" />
                   </div>
+                  <div className="sm:col-span-2 flex items-center justify-between py-2 px-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <label className="text-xs font-medium text-slate-600">Active Status</label>
+                    <button type="button" onClick={() => setForm(p => ({ ...p, active_flag: !p.active_flag }))}
+                      className={`px-3 py-1 rounded text-[11px] font-bold uppercase transition-all ${form.active_flag ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-slate-200 text-slate-500 border border-slate-300'}`}>
+                      {form.active_flag ? 'Active' : 'Inactive'}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Rule Items */}
@@ -217,9 +251,9 @@ export const RiskMatrix = () => {
                 <div className="flex gap-3 pt-2">
                   <button type="submit" disabled={submitting}
                     className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors disabled:opacity-50">
-                    {submitting ? 'Saving...' : 'Save Rule'}
+                    {submitting ? 'Saving...' : editingId ? 'Update Rule' : 'Save Rule'}
                   </button>
-                  <button type="button" onClick={() => setShowForm(false)}
+                  <button type="button" onClick={cancelEdit}
                     className="px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-500 hover:bg-slate-50 transition-colors">
                     Cancel
                   </button>
@@ -285,13 +319,18 @@ export const RiskMatrix = () => {
 
                         {/* Active toggle */}
                         <button onClick={() => handleToggle(rule.id_rule)}
+                          title={rule.active_flag ? 'Deactivate' : 'Activate'}
                           className={`transition-colors ${rule.active_flag ? 'text-emerald-500 hover:text-emerald-700' : 'text-slate-300 hover:text-slate-500'}`}>
                           {rule.active_flag
                             ? <ToggleRight className="w-6 h-6" />
                             : <ToggleLeft className="w-6 h-6" />}
                         </button>
 
-                        <button onClick={() => handleDelete(rule.id_rule)} className="text-slate-300 hover:text-rose-500 transition-colors ml-1">
+                        <button onClick={() => startEdit(rule)} className="text-slate-300 hover:text-blue-600 transition-colors ml-1" title="Edit">
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+
+                        <button onClick={() => handleDelete(rule.id_rule)} className="text-slate-300 hover:text-rose-500 transition-colors ml-1" title="Delete">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>

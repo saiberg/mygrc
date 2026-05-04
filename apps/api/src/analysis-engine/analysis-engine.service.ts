@@ -39,6 +39,9 @@ export class AnalysisEngineService {
    */
   async executeRun(dto: CreateAnalysisRunDto, executedBy: string) {
     // 1. Create run record
+    const institution = await this.prisma.institution.findFirst();
+    const instId = institution?.id || '';
+
     const run = await this.prisma.grcAnalysisRun.create({
       data: {
         run_name: dto.run_name,
@@ -46,7 +49,7 @@ export class AnalysisEngineService {
         scope_value: dto.scope_value,
         executed_by: dto.executed_by || executedBy,
         status: 'Running',
-        institutionId: '',
+        institutionId: instId,
       },
     });
 
@@ -99,7 +102,7 @@ export class AnalysisEngineService {
                   risk_level: rule.risk_level,
                   finding_status: 'Open',
                   evidence_text: `User has roles matching rule objects: ${ruleObjectValues.join(', ')}`,
-                  institutionId: '',
+                  institutionId: instId,
                 },
               });
               findingsCreated++;

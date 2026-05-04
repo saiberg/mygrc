@@ -121,8 +121,10 @@ export class MasterDataService {
       data: {
         id_user: dto.id_user,
         id_role: dto.id_role,
-        valid_from: dto.valid_from ? new Date(dto.valid_from) : new Date(),
+        assigned_at: dto.assigned_at ? new Date(dto.assigned_at) : undefined,
+        valid_from: dto.valid_from ? new Date(dto.valid_from) : undefined,
         valid_to: dto.valid_to ? new Date(dto.valid_to) : null,
+        status: dto.status !== undefined ? dto.status : true,
         institutionId: '',
       }
     });
@@ -132,5 +134,38 @@ export class MasterDataService {
     return this.prisma.grcUserRole.delete({
       where: { id_user_role },
     });
+  }
+
+  // --- ROLE TRANSACTIONS ---
+  async getRoleTrxs() {
+    return this.prisma.grcRoleTrx.findMany({
+      include: { role: { select: { role_name: true, process_area: true, criticality: true } } },
+      orderBy: { role_name: 'asc' },
+    });
+  }
+
+  async getRoleTrxsByRole(roleName: string) {
+    return this.prisma.grcRoleTrx.findMany({
+      where: { role_name: roleName },
+      orderBy: [{ object: 'asc' }, { field: 'asc' }],
+    });
+  }
+
+  async createRoleTrx(dto: { role_name: string; object: string; field: string; transaction: string }) {
+    const role = await this.prisma.grcRole.findUnique({ where: { role_name: dto.role_name } });
+    if (!role) throw new NotFoundException(`Role '${dto.role_name}' not found`);
+
+    const exists = await this.prisma.grcRoleTrx.findFirst({
+      where: { role_name: dto.role_name, object: dto.object, field: dto.field, transaction: dto.transaction },
+    });
+    if (exists) throw new ConflictException('This transaction already exists for this role.');
+
+    return this.prisma.grcRoleTrx.create({
+      data: { ...dto, institutionId: '' },
+    });
+  }
+
+  async deleteRoleTrx(id_role_trx: string) {
+    return this.prisma.grcRoleTrx.delete({ where: { id_role_trx } });
   }
 }
