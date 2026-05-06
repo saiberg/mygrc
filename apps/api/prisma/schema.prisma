@@ -70,6 +70,7 @@ model GrcRole {
 
   assignedUsers GrcUserRole[]
   roleTrxs      GrcRoleTrx[]
+  findings      GrcFinding[]
 }
 
 model GrcRoleTrx {
@@ -143,7 +144,8 @@ model GrcAnalysisRun {
 model GrcFinding {
   id_finding     String   @id @default(uuid())
   id_run         String
-  id_user        String
+  id_user        String?
+  id_role        String?
   id_rule        String
   risk_level     String
   finding_status String // e.g., "Open", "Mitigated", "False Positive"
@@ -152,7 +154,8 @@ model GrcFinding {
   institutionId  String
 
   run         GrcAnalysisRun @relation(fields: [id_run], references: [id_run])
-  user        GrcUser        @relation(fields: [id_user], references: [id_user])
+  user        GrcUser?       @relation(fields: [id_user], references: [id_user])
+  role        GrcRole?       @relation(fields: [id_role], references: [id_role])
   rule        GrcRiskRule    @relation(fields: [id_rule], references: [id_rule])
   mitigation  GrcMitigation?
   institution Institution    @relation(fields: [institutionId], references: [id])

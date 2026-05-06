@@ -16,8 +16,8 @@ const StatusIcon = ({ status }: { status: string }) => {
   return <XCircle className="w-4 h-4 text-rose-500" />;
 };
 
-const SCOPE_TYPES = ['All Users', 'Department', 'User Group', 'Role-Based'];
-const DEFAULT_FORM = { run_name: '', scope_type: 'All Users', scope_value: 'ALL', executed_by: '' };
+const SCOPE_TYPES = ['User-Based', 'Role-Based'];
+const DEFAULT_FORM = { run_name: '', scope_type: 'User-Based', scope_value: 'ALL', executed_by: '' };
 
 export const AnalysisEngine = () => {
   const [runs, setRuns] = useState<any[]>([]);
@@ -126,7 +126,10 @@ export const AnalysisEngine = () => {
                 {/* Info box */}
                 <div className="sm:col-span-2 bg-blue-50 rounded-lg p-3 border border-blue-100 flex items-start gap-2">
                   <BarChart3 className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
-                  <p className="text-xs text-blue-700">The engine will evaluate all <strong>active users</strong> against all <strong>active risk rules</strong> and generate findings for any SOD conflicts or sensitive access detected.</p>
+                  <p className="text-xs text-blue-700">
+                    <strong>User-Based:</strong> Evaluates combined transactions across all assigned roles for each user.<br/>
+                    <strong>Role-Based:</strong> Evaluates each role independently for internal transaction conflicts.
+                  </p>
                 </div>
 
                 <div className="sm:col-span-2 flex gap-3">

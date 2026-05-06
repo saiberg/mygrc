@@ -20,7 +20,7 @@ export class AnalysisEngineService {
       where: { id_run },
       include: {
         findings: {
-          include: { user: true, rule: true, mitigation: true },
+          include: { user: true, role: true, rule: true, mitigation: true },
           orderBy: { risk_level: 'asc' },
         },
       },
@@ -30,15 +30,11 @@ export class AnalysisEngineService {
   }
 
   /**
-   * Executes an analysis run synchronously:
-   * 1. Creates the GrcAnalysisRun record with status "Running"
-   * 2. Loads all active rules and all users in scope
-   * 3. Checks each user's assigned roles against each rule's items
-   * 4. Creates GrcFinding records for conflicts found
-   * 5. Updates the run status to "Completed"
+   * Executes an analysis run:
+   * 1. User-Based: Aggregates all transactions from all user roles to find SoD conflicts.
+   * 2. Role-Based: Checks individual roles for internal SoD conflicts.
    */
   async executeRun(dto: CreateAnalysisRunDto, executedBy: string) {
-    // 1. Create run record
     const institution = await this.prisma.institution.findFirst();
     const instId = institution?.id || '';
 
@@ -54,46 +50,77 @@ export class AnalysisEngineService {
     });
 
     try {
-      // 2. Load active rules with their items
       const activeRules = await this.prisma.grcRiskRule.findMany({
         where: { active_flag: true },
         include: { items: true },
       });
 
-      // 3. Load users with their role assignments
-      const users = await this.prisma.grcUser.findMany({
-        where: { status: true },
-        include: {
-          roles: {
-            where: { status: true },
-            include: { role: true },
-          },
-        },
-      });
-
       let findingsCreated = 0;
 
-      // 4. Apply SoD conflict detection
-      for (const rule of activeRules) {
-        const ruleObjectValues = rule.items.map(i => i.object_value.toUpperCase());
+      if (dto.scope_type === 'Role-Based') {
+        const roles = await this.prisma.grcRole.findMany({
+          where: { status: true },
+          include: { roleTrxs: true },
+        });
 
-        for (const user of users) {
-          const userRoleNames = user.roles.map(r => r.role.role_name.toUpperCase());
+        for (const rule of activeRules) {
+          const requiredTcodes = rule.items.map(i => i.object_value.toUpperCase());
+          if (requiredTcodes.length === 0) continue;
 
-          // Check if the user has any role matching the rule objects (simplified SoD check)
-          const hasConflict = ruleObjectValues.some(val => userRoleNames.includes(val));
+          for (const role of roles) {
+            const roleTcodes = new Set(role.roleTrxs.map(t => t.transaction.toUpperCase()));
+            
+            // Conflict if role has ALL required transactions
+            const hasConflict = requiredTcodes.every(tc => roleTcodes.has(tc));
 
-          if (hasConflict) {
-            // Check for existing open finding to avoid duplicates
-            const existingFinding = await this.prisma.grcFinding.findFirst({
-              where: {
-                id_run: run.id_run,
-                id_user: user.id_user,
-                id_rule: rule.id_rule,
+            if (hasConflict) {
+              await this.prisma.grcFinding.create({
+                data: {
+                  id_run: run.id_run,
+                  id_role: role.id_role,
+                  id_rule: rule.id_rule,
+                  risk_level: rule.risk_level,
+                  finding_status: 'Open',
+                  evidence_text: `Role "${role.role_name}" contains all conflicting transactions: ${requiredTcodes.join(', ')}`,
+                  institutionId: instId,
+                },
+              });
+              findingsCreated++;
+            }
+          }
+        }
+      } 
+      else {
+        // User-Based (Default)
+        const users = await this.prisma.grcUser.findMany({
+          where: { status: true },
+          include: {
+            roles: {
+              where: { status: true },
+              include: { 
+                role: {
+                  include: { roleTrxs: true }
+                }
               },
+            },
+          },
+        });
+
+        for (const rule of activeRules) {
+          const requiredTcodes = rule.items.map(i => i.object_value.toUpperCase());
+          if (requiredTcodes.length === 0) continue;
+
+          for (const user of users) {
+            // Aggregate all transactions from all assigned roles
+            const userTcodes = new Set<string>();
+            user.roles.forEach(ur => {
+              ur.role.roleTrxs.forEach(rt => userTcodes.add(rt.transaction.toUpperCase()));
             });
 
-            if (!existingFinding) {
+            // Conflict if user has ALL required transactions across all roles
+            const hasConflict = requiredTcodes.every(tc => userTcodes.has(tc));
+
+            if (hasConflict) {
               await this.prisma.grcFinding.create({
                 data: {
                   id_run: run.id_run,
@@ -101,7 +128,7 @@ export class AnalysisEngineService {
                   id_rule: rule.id_rule,
                   risk_level: rule.risk_level,
                   finding_status: 'Open',
-                  evidence_text: `User has roles matching rule objects: ${ruleObjectValues.join(', ')}`,
+                  evidence_text: `User has access to all conflicting transactions through assigned roles: ${requiredTcodes.join(', ')}`,
                   institutionId: instId,
                 },
               });
@@ -111,12 +138,9 @@ export class AnalysisEngineService {
         }
       }
 
-      // 5. Update run to Completed
       return this.prisma.grcAnalysisRun.update({
         where: { id_run: run.id_run },
-        data: {
-          status: 'Completed',
-        },
+        data: { status: 'Completed' },
         include: { _count: { select: { findings: true } } },
       });
 
