@@ -126,7 +126,7 @@ export const RiskMatrix = () => {
 
   // Group rules by risk level
   const rulesByLevel = RISK_LEVELS.reduce((acc, level) => {
-    acc[level] = rules.filter(r => r.risk_level === level);
+    acc[level] = rules.filter(r => (r.risk_level || '').toUpperCase() === level.toUpperCase());
     return acc;
   }, {} as Record<string, any[]>);
 

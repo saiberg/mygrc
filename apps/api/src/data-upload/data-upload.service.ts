@@ -8,7 +8,7 @@ const csvParser = require('csv-parser');
 export class DataUploadService {
   private readonly logger = new Logger(DataUploadService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async processUploadAndImport(type: string, file: Express.Multer.File, userId: string, mode: string = 'incremental') {
     const isCsv = file.mimetype === 'text/csv' || file.originalname.endsWith('.csv');
@@ -25,7 +25,7 @@ export class DataUploadService {
         file_name: file.originalname,
         imported_by: userId,
         result_status: 'Processing',
-        institutionId: '', 
+        institutionId: 'inst1',
       },
     });
 
@@ -59,7 +59,7 @@ export class DataUploadService {
 
       // 5. Update Import Log successfully
       const finalStatus = errorRows > 0 ? (okRows > 0 ? 'Partial' : 'Failed') : 'Success';
-      
+
       const finishedLog = await this.prisma.grcImportLog.update({
         where: { id_import: importLog.id_import },
         data: {
@@ -76,7 +76,7 @@ export class DataUploadService {
 
     } catch (error: any) {
       this.logger.error(`Import failed: ${error.message}`);
-      
+
       await this.prisma.grcImportLog.update({
         where: { id_import: importLog.id_import },
         data: {
@@ -123,8 +123,8 @@ export class DataUploadService {
       const row = rows[i];
       try {
         if (type === 'users') {
-          if (!row.user_code) throw new Error(`Row ${i+2}: User Code is mandatory`);
-          if (row.email && !this.validateEmail(row.email)) throw new Error(`Row ${i+2}: Invalid email format`);
+          if (!row.user_code) throw new Error(`Row ${i + 2}: User Code is mandatory`);
+          if (row.email && !this.validateEmail(row.email)) throw new Error(`Row ${i + 2}: Invalid email format`);
 
           await this.prisma.grcUser.upsert({
             where: { user_code: row.user_code.toString() },
@@ -140,12 +140,12 @@ export class DataUploadService {
               email: row.email?.toString() || null,
               status: true,
               source_system: row.source_system?.toString() || null,
-              institutionId: '',
+              institutionId: 'inst1',
             },
           });
         }
         else if (type === 'roles') {
-          if (!row.role_name) throw new Error(`Row ${i+2}: Role Name is mandatory`);
+          if (!row.role_name) throw new Error(`Row ${i + 2}: Role Name is mandatory`);
 
           await this.prisma.grcRole.upsert({
             where: { role_name: row.role_name.toString() },
@@ -161,18 +161,18 @@ export class DataUploadService {
               process_area: row.process_area?.toString() || null,
               criticality: row.criticality?.toString() || 'Medium',
               status: row.status !== undefined ? (row.status === 'true' || row.status === true || row.status === 1 || row.status === '1') : true,
-              institutionId: '',
+              institutionId: 'inst1',
             },
           });
         }
         else if (type === 'assignments') {
-          if (!row.user_code || !row.role_name) throw new Error(`Row ${i+2}: user_code and role_name are required`);
+          if (!row.user_code || !row.role_name) throw new Error(`Row ${i + 2}: user_code and role_name are required`);
 
           const user = await this.prisma.grcUser.findUnique({ where: { user_code: row.user_code.toString() } });
           const role = await this.prisma.grcRole.findUnique({ where: { role_name: row.role_name.toString() } });
 
-          if (!user) throw new Error(`Row ${i+2}: User ${row.user_code} not found`);
-          if (!role) throw new Error(`Row ${i+2}: Role ${row.role_name} not found`);
+          if (!user) throw new Error(`Row ${i + 2}: User ${row.user_code} not found`);
+          if (!role) throw new Error(`Row ${i + 2}: Role ${row.role_name} not found`);
 
           await this.prisma.grcUserRole.create({
             data: {
@@ -182,12 +182,12 @@ export class DataUploadService {
               valid_from: row.valid_from ? new Date(row.valid_from) : null,
               valid_to: row.valid_to ? new Date(row.valid_to) : null,
               status: row.status !== undefined ? (row.status === 'true' || row.status === true || row.status === 1 || row.status === '1') : true,
-              institutionId: '',
+              institutionId: 'inst1',
             }
           });
         }
         else if (type === 'risk-rules') {
-          if (!row.rule_code || !row.rule_name) throw new Error(`Row ${i+2}: rule_code and rule_name are mandatory`);
+          if (!row.rule_code || !row.rule_name) throw new Error(`Row ${i + 2}: rule_code and rule_name are mandatory`);
 
           await this.prisma.grcRiskRule.upsert({
             where: { rule_code: row.rule_code.toString() },
@@ -211,19 +211,19 @@ export class DataUploadService {
               active_flag: row.active_flag !== undefined
                 ? (row.active_flag === 'true' || row.active_flag === true || row.active_flag === 1 || row.active_flag === '1')
                 : true,
-              institutionId: '',
+              institutionId: 'inst1',
             },
           });
         }
         else if (type === 'rule-items') {
           if (!row.rule_code || !row.object_type || !row.object_value) {
-            throw new Error(`Row ${i+2}: rule_code, object_type and object_value are mandatory`);
+            throw new Error(`Row ${i + 2}: rule_code, object_type and object_value are mandatory`);
           }
 
           const rule = await this.prisma.grcRiskRule.findUnique({
             where: { rule_code: row.rule_code.toString() },
           });
-          if (!rule) throw new Error(`Row ${i+2}: Risk Rule '${row.rule_code}' not found — upload the rule first`);
+          if (!rule) throw new Error(`Row ${i + 2}: Risk Rule '${row.rule_code}' not found — upload the rule first`);
 
           const seqNo = row.seq_no ? parseInt(row.seq_no.toString(), 10) : (
             await this.prisma.grcRuleItem.count({ where: { id_rule: rule.id_rule } }) + 1
@@ -246,11 +246,11 @@ export class DataUploadService {
         }
         else if (type === 'role-transactions') {
           if (!row.role_name || !row.object || !row.field || !row.transaction) {
-            throw new Error(`Row ${i+2}: role_name, object, field, and transaction are required`);
+            throw new Error(`Row ${i + 2}: role_name, object, field, and transaction are required`);
           }
 
           const role = await this.prisma.grcRole.findUnique({ where: { role_name: row.role_name.toString() } });
-          if (!role) throw new Error(`Row ${i+2}: Role ${row.role_name} not found`);
+          if (!role) throw new Error(`Row ${i + 2}: Role ${row.role_name} not found`);
 
           const existingTrx = await this.prisma.grcRoleTrx.findFirst({
             where: {
@@ -268,14 +268,14 @@ export class DataUploadService {
                 object: row.object.toString(),
                 field: row.field.toString(),
                 transaction: row.transaction.toString(),
-                institutionId: '',
+                institutionId: 'inst1',
               }
             });
           }
         }
         okRows++;
       } catch (err: any) {
-        this.logger.warn(`Row ${i+2} error: ${err.message}`);
+        this.logger.warn(`Row ${i + 2} error: ${err.message}`);
         errors.push(err.message);
         errorRows++;
       }
@@ -284,7 +284,7 @@ export class DataUploadService {
     return {
       okRows,
       errorRows,
-      message: errors.length > 0 
+      message: errors.length > 0
         ? `Processed ${okRows} successfully. Failures: ${errors.slice(0, 5).join('; ')}${errors.length > 5 ? '...' : ''}`
         : `Processed ${okRows} successfully.`
     };
