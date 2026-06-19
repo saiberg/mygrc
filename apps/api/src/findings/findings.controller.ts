@@ -17,9 +17,14 @@ export class FindingsController {
   @ApiOperation({ summary: 'List findings with optional filters' })
   @ApiQuery({ name: 'status', required: false, description: 'Filter by finding_status' })
   @ApiQuery({ name: 'risk_level', required: false, description: 'Filter by risk_level' })
+  @ApiQuery({ name: 'run_name', required: false, description: 'Filter by analysis run name' })
   @Get()
-  getFindings(@Query('status') status?: string, @Query('risk_level') risk_level?: string) {
-    return this.findingsService.getFindings(status, risk_level);
+  getFindings(
+    @Query('status') status?: string,
+    @Query('risk_level') risk_level?: string,
+    @Query('run_name') run_name?: string,
+  ) {
+    return this.findingsService.getFindings(status, risk_level, run_name);
   }
 
   @ApiOperation({ summary: 'Get a single finding detail' })

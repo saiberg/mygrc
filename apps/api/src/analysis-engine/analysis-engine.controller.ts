@@ -20,6 +20,18 @@ export class AnalysisEngineController {
     return this.analysisEngineService.getRunById(id);
   }
 
+  @ApiOperation({ summary: 'Get statistics/report for a specific run' })
+  @Get('runs/:id/stats')
+  getRunStats(@Param('id') id: string) {
+    return this.analysisEngineService.getRunStats(id);
+  }
+
+  @ApiOperation({ summary: 'Get Executive Report data for a specific run' })
+  @Get('runs/:id/executive-report')
+  getRunExecutiveReport(@Param('id') id: string) {
+    return this.analysisEngineService.getRunExecutiveReport(id);
+  }
+
   @ApiOperation({ summary: 'Execute a new GRC analysis run synchronously' })
   @Post('runs')
   executeRun(@Body() dto: CreateAnalysisRunDto, @Req() req: any) {

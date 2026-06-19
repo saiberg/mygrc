@@ -7,6 +7,8 @@ import {
   ShieldAlert, 
   PlayCircle, 
   CheckSquare, 
+  BarChart3,
+  FileText,
   LogOut
 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -18,6 +20,8 @@ const NAV_ITEMS = [
   { path: '/risk-matrix', label: 'Risk Matrix', icon: ShieldAlert },
   { path: '/analysis-engine', label: 'Analysis Engine', icon: PlayCircle },
   { path: '/findings', label: 'Findings & Mitigations', icon: CheckSquare },
+  { path: '/risks-reports', label: 'Risks Reports', icon: BarChart3 },
+  { path: '/executive-report', label: 'Executive Report', icon: FileText },
 ];
 
 export const AppLayout: React.FC = () => {

@@ -28,6 +28,7 @@ export const MasterData = () => {
 
   // Editing state
   const [editing, setEditing] = useState<{ id: string; type: Tab } | null>(null);
+  const [editingTrxId, setEditingTrxId] = useState<string | null>(null);
 
   // Form states
   const [userForm, setUserForm] = useState({ user_code: '', full_name: '', email: '', source_system: '' });
@@ -77,7 +78,7 @@ export const MasterData = () => {
         body: JSON.stringify(userForm),
       });
       if (!res.ok) throw new Error((await res.json()).message);
-      
+
       setUserForm({ user_code: '', full_name: '', email: '', source_system: '' });
       setEditing(null);
       showMessage('ok', isEdit ? 'User updated.' : 'User created.');
@@ -104,7 +105,7 @@ export const MasterData = () => {
       });
       if (!res.ok) throw new Error((await res.json()).message);
 
-      setRoleForm({ role_name: '', process_area: '', criticality: 'Medium', role_desc: '' });
+      setRoleForm({ role_name: '', process_area: '', criticality: 'Medium', role_desc: '', status: true });
       setEditing(null);
       showMessage('ok', isEdit ? 'Role updated.' : 'Role created.');
       fetchData();
@@ -125,7 +126,7 @@ export const MasterData = () => {
         body: JSON.stringify(assignmentForm),
       });
       if (!res.ok) throw new Error((await res.json()).message);
-      setAssignmentForm({ id_user: '', id_role: '', valid_from: new Date().toISOString().split('T')[0], valid_to: '' });
+      setAssignmentForm({ id_user: '', id_role: '', assigned_at: new Date().toISOString().split('T')[0], valid_from: new Date().toISOString().split('T')[0], valid_to: '', status: true });
       showMessage('ok', 'Role assigned successfully.');
       fetchData();
     } catch (err: any) {
@@ -146,18 +147,24 @@ export const MasterData = () => {
     }
   };
 
-  const handleCreateRoleTrx = async (e: React.FormEvent) => {
+  const handleCreateOrUpdateRoleTrx = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const res = await fetch(`${API_BASE}/master-data/role-transactions`, {
-        method: 'POST',
+      const isEdit = !!editingTrxId;
+      const url = isEdit
+        ? `${API_BASE}/master-data/role-transactions/${editingTrxId}`
+        : `${API_BASE}/master-data/role-transactions`;
+      const method = isEdit ? 'PATCH' : 'POST';
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(trxForm),
       });
       if (!res.ok) throw new Error((await res.json()).message);
       setTrxForm({ role_name: '', object: '', field: '', transaction: '' });
-      showMessage('ok', 'Transaction added.');
+      setEditingTrxId(null);
+      showMessage('ok', isEdit ? 'Transaction updated.' : 'Transaction added.');
       fetchData();
     } catch (err: any) {
       showMessage('err', err.message);
@@ -178,6 +185,11 @@ export const MasterData = () => {
 
   const startEdit = (type: Tab, item: any) => {
     setTab(type);
+    if (type === 'role-transactions') {
+      setEditingTrxId(item.id_role_trx);
+      setTrxForm({ role_name: item.role_name, object: item.object, field: item.field, transaction: item.transaction });
+      return;
+    }
     setEditing({ id: type === 'users' ? item.id_user : item.id_role, type });
     if (type === 'users') {
       setUserForm({ user_code: item.user_code, full_name: item.full_name, email: item.email, source_system: item.source_system || '' });
@@ -188,8 +200,10 @@ export const MasterData = () => {
 
   const cancelEdit = () => {
     setEditing(null);
+    setEditingTrxId(null);
     setUserForm({ user_code: '', full_name: '', email: '', source_system: '' });
     setRoleForm({ role_name: '', process_area: '', criticality: 'Medium', role_desc: '', status: true });
+    setTrxForm({ role_name: '', object: '', field: '', transaction: '' });
   };
 
   const filteredUsers = users.filter(u =>
@@ -265,9 +279,13 @@ export const MasterData = () => {
             <h3 className="font-semibold text-slate-800 mb-4 flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <Plus className="w-4 h-4 text-blue-600" />
-                {editing ? `Edit ${editing.type === 'users' ? 'User' : 'Role'}` : `New ${tab === 'users' ? 'User' : tab === 'roles' ? 'Role' : tab === 'assignments' ? 'Assignment' : 'Transaction'}`}
+                {editing
+                  ? `Edit ${editing.type === 'users' ? 'User' : 'Role'}`
+                  : editingTrxId
+                    ? 'Edit Transaction'
+                    : `New ${tab === 'users' ? 'User' : tab === 'roles' ? 'Role' : tab === 'assignments' ? 'Assignment' : 'Transaction'}`}
               </span>
-              {editing && (
+              {(editing || editingTrxId) && (
                 <button onClick={cancelEdit} className="text-xs text-slate-400 hover:text-rose-500">Cancel</button>
               )}
             </h3>
@@ -381,11 +399,12 @@ export const MasterData = () => {
                 </button>
               </form>
             ) : (
-              <form onSubmit={handleCreateRoleTrx} className="space-y-3">
+              <form onSubmit={handleCreateOrUpdateRoleTrx} className="space-y-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-500 mb-1">Role *</label>
                   <select value={trxForm.role_name} onChange={e => setTrxForm(p => ({ ...p, role_name: e.target.value }))}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition bg-white text-sm">
+                    disabled={!!editingTrxId}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition bg-white text-sm disabled:bg-slate-50 disabled:text-slate-400">
                     <option value="">Select role...</option>
                     {roles.map(r => <option key={r.id_role} value={r.role_name}>{r.role_name}</option>)}
                   </select>
@@ -404,7 +423,7 @@ export const MasterData = () => {
                 ))}
                 <button type="submit" disabled={submitting || !trxForm.role_name || !trxForm.object || !trxForm.field || !trxForm.transaction}
                   className="w-full mt-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors disabled:opacity-50">
-                  {submitting ? 'Saving...' : 'Add Transaction'}
+                  {submitting ? 'Saving...' : editingTrxId ? 'Update Transaction' : 'Add Transaction'}
                 </button>
               </form>
             )}
@@ -495,7 +514,7 @@ export const MasterData = () => {
                         <div className="text-[10px] text-slate-400 uppercase tracking-tight">{u.source_system || 'Manual'}</div>
                       </td>
                       <td className="px-4 py-4 text-center">
-                        <button onClick={() => handleToggleStatus('users', u.id_user)} 
+                        <button onClick={() => handleToggleStatus('users', u.id_user)}
                           className={`px-2 py-1 rounded text-[10px] font-bold uppercase transition-all ${u.status ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-100 text-slate-400 border border-slate-200'}`}>
                           {u.status ? 'Active' : 'Inactive'}
                         </button>
@@ -529,7 +548,7 @@ export const MasterData = () => {
                       </td>
                       <td className="px-4 py-4 text-slate-500 text-xs italic">{r.role_desc || '—'}</td>
                       <td className="px-4 py-4 text-center">
-                        <button onClick={() => handleToggleStatus('roles', r.id_role)} 
+                        <button onClick={() => handleToggleStatus('roles', r.id_role)}
                           className={`px-2 py-1 rounded text-[10px] font-bold uppercase transition-all ${r.status ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-100 text-slate-400 border border-slate-200'}`}>
                           {r.status ? 'Active' : 'Inactive'}
                         </button>
@@ -594,10 +613,14 @@ export const MasterData = () => {
                         <span className="px-2 py-1 bg-slate-100 text-slate-700 text-xs font-mono rounded">{t.transaction}</span>
                       </td>
                       <td className="px-4 py-4 text-right pr-6">
-                        <button onClick={() => handleDelete('role-transactions', t.id_role_trx)}
-                          className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all opacity-0 group-hover:opacity-100">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => startEdit('role-transactions', t)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" title="Edit">
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => handleDelete('role-transactions', t.id_role_trx)} className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all" title="Delete">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

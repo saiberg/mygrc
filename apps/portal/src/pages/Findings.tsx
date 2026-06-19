@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CheckSquare, AlertTriangle, CheckCircle2, Filter, ChevronDown, ShieldAlert, User, BookOpen, Calendar } from 'lucide-react';
+import { CheckSquare, AlertTriangle, CheckCircle2, Filter, ChevronDown, ShieldAlert, User, BookOpen, Calendar, PlayCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { API_BASE } from '../config';
@@ -23,9 +23,11 @@ const RISK_OPTIONS   = ['Critical', 'High', 'Medium', 'Low'];
 export const Findings = () => {
   const [findings, setFindings] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
+  const [runs, setRuns] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterRisk, setFilterRisk] = useState('');
+  const [filterRun, setFilterRun] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [mitigateId, setMitigateId] = useState<string | null>(null);
   const [mitigateForm, setMitigateForm] = useState({ owner_name: '', comments: '', valid_until: '' });
@@ -38,6 +40,7 @@ export const Findings = () => {
       const params = new URLSearchParams();
       if (filterStatus) params.append('status', filterStatus);
       if (filterRisk) params.append('risk_level', filterRisk);
+      if (filterRun) params.append('run_name', filterRun);
       const [findRes, sumRes] = await Promise.all([
         fetch(`${API_BASE}/findings?${params}`),
         fetch(`${API_BASE}/findings/summary`),
@@ -49,7 +52,15 @@ export const Findings = () => {
     }
   };
 
-  useEffect(() => { fetchFindings(); }, [filterStatus, filterRisk]);
+  // Load runs list once on mount for the filter dropdown
+  useEffect(() => {
+    fetch(`${API_BASE}/analysis-engine/runs`)
+      .then(r => r.json())
+      .then(data => setRuns(Array.isArray(data) ? data : []))
+      .catch(() => setRuns([]));
+  }, []);
+
+  useEffect(() => { fetchFindings(); }, [filterStatus, filterRisk, filterRun]);
 
   const showMsg = (type: 'ok' | 'err', text: string) => {
     setMessage({ type, text });
@@ -141,8 +152,18 @@ export const Findings = () => {
           <option value="">All Risk Levels</option>
           {RISK_OPTIONS.map(r => <option key={r}>{r}</option>)}
         </select>
-        {(filterStatus || filterRisk) && (
-          <button onClick={() => { setFilterStatus(''); setFilterRisk(''); }}
+        <div className="relative">
+          <PlayCircle className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <select value={filterRun} onChange={e => setFilterRun(e.target.value)}
+            className="pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-sm text-slate-600 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300 bg-white">
+            <option value="">All Analysis Runs</option>
+            {runs.map(r => (
+              <option key={r.id_run} value={r.run_name}>{r.run_name}</option>
+            ))}
+          </select>
+        </div>
+        {(filterStatus || filterRisk || filterRun) && (
+          <button onClick={() => { setFilterStatus(''); setFilterRisk(''); setFilterRun(''); }}
             className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors">
             Clear filters
           </button>

@@ -6,7 +6,7 @@ import { AssignRoleDto } from './dto/assign-role.dto';
 
 @Injectable()
 export class MasterDataService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   // --- USERS ---
   async getUsers() {
@@ -29,7 +29,7 @@ export class MasterDataService {
     return this.prisma.grcUser.create({
       data: {
         ...dto,
-        institutionId: '',
+        institutionId: 'inst1',
       }
     });
   }
@@ -72,7 +72,7 @@ export class MasterDataService {
     return this.prisma.grcRole.create({
       data: {
         ...dto,
-        institutionId: '',
+        institutionId: 'inst1',
       }
     });
   }
@@ -125,7 +125,7 @@ export class MasterDataService {
         valid_from: dto.valid_from ? new Date(dto.valid_from) : undefined,
         valid_to: dto.valid_to ? new Date(dto.valid_to) : null,
         status: dto.status !== undefined ? dto.status : true,
-        institutionId: '',
+        institutionId: 'inst1',
       }
     });
   }
@@ -161,7 +161,14 @@ export class MasterDataService {
     if (exists) throw new ConflictException('This transaction already exists for this role.');
 
     return this.prisma.grcRoleTrx.create({
-      data: { ...dto, institutionId: '' },
+      data: { ...dto, institutionId: 'inst1' },
+    });
+  }
+
+  async updateRoleTrx(id: string, dto: { object?: string; field?: string; transaction?: string }) {
+    return this.prisma.grcRoleTrx.update({
+      where: { id_role_trx: id },
+      data: dto,
     });
   }
 

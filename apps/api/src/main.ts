@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import * as os from 'os';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
@@ -21,7 +22,12 @@ async function bootstrap() {
 
   // CORS configuration
   app.enableCors({
-    origin: '*', // Customize this as needed
+    origin: [
+      'http://localhost:5173',
+      'http://100.96.122.41:5173',
+      'http://100.96.122.42:5173',
+      'http://laptop-lur3k0l3.tailae45b6.ts.net:5173',
+    ],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   });
@@ -43,8 +49,18 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, documentFactory);
 
   const port = process.env.PORT || 3000;
-  await app.listen(port);
-  console.log(`\n🚀  API running at http://localhost:${port}/api`);
-  console.log(`📚  Swagger Docs running at http://localhost:${port}/api/docs`);
+  const host = process.env.HOST || '0.0.0.0';
+  await app.listen(port, host);
+
+  // Get local network IP for convenience
+  const nets = os.networkInterfaces();
+  const localIp = Object.values(nets)
+    .flat()
+    .find((n) => n?.family === 'IPv4' && !n.internal)?.address ?? 'localhost';
+
+  console.log(`\n🚀  API running at:`);
+  console.log(`   Local:   http://localhost:${port}/api`);
+  console.log(`   Network: http://${localIp}:${port}/api`);
+  console.log(`📚  Swagger Docs: http://${localIp}:${port}/api/docs`);
 }
 bootstrap();

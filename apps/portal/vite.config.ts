@@ -7,4 +7,10 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  server: {
+    host: '0.0.0.0',
+    allowedHosts: [
+      'laptop-lur3k0l3.tailae45b6.ts.net',
+    ],
+  },
 })

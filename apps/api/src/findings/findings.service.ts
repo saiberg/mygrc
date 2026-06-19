@@ -6,11 +6,12 @@ import { CreateMitigationDto } from './dto/create-mitigation.dto';
 export class FindingsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getFindings(status?: string, risk_level?: string) {
+  async getFindings(status?: string, risk_level?: string, run_name?: string) {
     return this.prisma.grcFinding.findMany({
       where: {
         ...(status ? { finding_status: status } : {}),
         ...(risk_level ? { risk_level } : {}),
+        ...(run_name ? { run: { run_name } } : {}),
       },
       include: {
         user: { select: { user_code: true, full_name: true } },

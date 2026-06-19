@@ -27,19 +27,27 @@ export const Dashboard = () => {
   const [riskChart, setRiskChart] = useState<any[]>([]);
   const [heatmap, setHeatmap] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
+      setError(null);
       const [sRes, cRes, hRes] = await Promise.all([
         fetch(`${API_BASE}/dashboard/stats`),
         fetch(`${API_BASE}/dashboard/findings-by-risk`),
         fetch(`${API_BASE}/dashboard/heatmap`),
       ]);
+      if (!sRes.ok || !cRes.ok || !hRes.ok) throw new Error('La API respondió con un error.');
       setStats(await sRes.json());
       setRiskChart(await cRes.json());
       setHeatmap(await hRes.json());
     } catch (err) {
       console.error('Failed to fetch dashboard data', err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'No se pudo conectar con el servidor. Verifica que la API y la base de datos estén en línea.'
+      );
     } finally {
       setLoading(false);
     }
@@ -47,14 +55,36 @@ export const Dashboard = () => {
 
   useEffect(() => { fetchData(); }, []);
 
-  const kpiData = stats ? [
+  const kpiData = stats?.kpis ? [
     { label: 'Total Users', value: stats.kpis.totalUsers, icon: Users, color: 'bg-blue-50 text-blue-600', positive: true, change: '0%' },
     { label: 'Open Findings', value: stats.kpis.openFindings, icon: ShieldAlert, color: 'bg-amber-50 text-amber-600', positive: false, change: '0%' },
     { label: 'Mitigated', value: stats.kpis.mitigatedFindings, icon: CheckCircle2, color: 'bg-emerald-50 text-emerald-600', positive: true, change: '0%' },
     { label: 'Critical Rules', value: stats.kpis.criticalRules, icon: AlertTriangle, color: 'bg-rose-50 text-rose-600', positive: false, change: '0%' },
   ] : [];
 
-  if (loading) return <div className="p-8 text-slate-400">Loading dashboard...</div>;
+  if (loading) return <div className="p-8 text-slate-400">Cargando dashboard...</div>;
+
+  if (error) return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex flex-col items-center justify-center py-24 gap-6"
+    >
+      <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center">
+        <AlertTriangle className="w-8 h-8 text-rose-500" />
+      </div>
+      <div className="text-center max-w-md">
+        <h2 className="text-lg font-semibold text-slate-800 mb-1">No se pudo cargar el dashboard</h2>
+        <p className="text-sm text-slate-500 mb-4">{error}</p>
+        <button
+          onClick={fetchData}
+          className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
+        >
+          Reintentar
+        </button>
+      </div>
+    </motion.div>
+  );
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-8">

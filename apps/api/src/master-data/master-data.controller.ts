@@ -110,6 +110,12 @@ export class MasterDataController {
     return this.masterDataService.createRoleTrx(dto);
   }
 
+  @ApiOperation({ summary: 'Update a Role Transaction' })
+  @Patch('role-transactions/:id')
+  updateRoleTrx(@Param('id') id: string, @Body() dto: { object?: string; field?: string; transaction?: string }) {
+    return this.masterDataService.updateRoleTrx(id, dto);
+  }
+
   @ApiOperation({ summary: 'Delete a Role Transaction' })
   @Delete('role-transactions/:id')
   deleteRoleTrx(@Param('id') id: string) {
