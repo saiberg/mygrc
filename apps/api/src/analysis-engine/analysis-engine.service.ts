@@ -404,28 +404,44 @@ export class AnalysisEngineService {
           if (requiredTcodes.length === 0) continue;
 
           for (const user of users) {
+            // Build a map of role ID to its transactions
+            const roleTransactionMap = new Map<string, Set<string>>();
+            user.roles.forEach(ur => {
+              const roleTcodes = new Set<string>();
+              ur.role.roleTrxs.forEach(rt => roleTcodes.add(rt.transaction.toUpperCase()));
+              roleTransactionMap.set(ur.role.id_role, roleTcodes);
+            });
+
             // Aggregate all transactions from all assigned roles
             const userTcodes = new Set<string>();
-            user.roles.forEach(ur => {
-              ur.role.roleTrxs.forEach(rt => userTcodes.add(rt.transaction.toUpperCase()));
+            roleTransactionMap.forEach(tcodes => {
+              tcodes.forEach(tc => userTcodes.add(tc));
             });
 
             // Conflict if user has ALL required transactions across all roles
             const hasConflict = requiredTcodes.every(tc => userTcodes.has(tc));
 
             if (hasConflict) {
-              await this.prisma.grcFinding.create({
-                data: {
-                  id_run: run.id_run,
-                  id_user: user.id_user,
-                  id_rule: rule.id_rule,
-                  risk_level: rule.risk_level,
-                  finding_status: 'Open',
-                  evidence_text: `User has access to all conflicting transactions through assigned roles: ${requiredTcodes.join(', ')}`,
-                  institutionId: instId,
-                },
-              });
-              findingsCreated++;
+              // Create a finding for each role that contributes to the conflict
+              for (const [roleId, roleTcodes] of roleTransactionMap.entries()) {
+                const conflictingTcodes = requiredTcodes.filter(tc => roleTcodes.has(tc));
+                
+                if (conflictingTcodes.length > 0) {
+                  await this.prisma.grcFinding.create({
+                    data: {
+                      id_run: run.id_run,
+                      id_user: user.id_user,
+                      id_role: roleId,
+                      id_rule: rule.id_rule,
+                      risk_level: rule.risk_level,
+                      finding_status: 'Open',
+                      evidence_text: `User role contains conflicting transactions: ${conflictingTcodes.join(', ')}`,
+                      institutionId: instId,
+                    },
+                  });
+                  findingsCreated++;
+                }
+              }
             }
           }
         }

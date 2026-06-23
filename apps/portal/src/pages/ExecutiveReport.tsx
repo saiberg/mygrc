@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   FileText, 
   LayoutDashboard, 
@@ -13,7 +13,8 @@ import {
   ShieldAlert,
   ArrowRight,
   Sliders,
-  CheckCircle2
+  CheckCircle2,
+  Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -79,6 +80,8 @@ export const ExecutiveReport = () => {
   const [error, setError] = useState<string | null>(null);
   const [activeSlide, setActiveSlide] = useState<number>(0);
   const [approvedStatus, setApprovedStatus] = useState<boolean>(false);
+  const [generatingPDF, setGeneratingPDF] = useState(false);
+  const presentationRef = useRef<HTMLDivElement>(null);
 
   const fetchRuns = async () => {
     setLoadingRuns(true);
@@ -157,6 +160,417 @@ export const ExecutiveReport = () => {
     return 'text-blue-600 bg-blue-50 border-blue-100';
   };
 
+  const oklchToHex = (colorStr: string): string => {
+    // Map common Tailwind oklch/oklab colors to hex equivalents
+    const colorMap: Record<string, string> = {
+      'oklch(0.505 0.213 25.2)': '#f97316',  // Orange
+      'oklch(0.637 0.238 16.4)': '#ef4444',  // Red
+      'oklch(0.705 0.213 142.5)': '#10b981', // Emerald
+      'oklch(0.611 0.287 42.1)': '#f59e0b', // Amber
+      'oklch(0.592 0.19 272)': '#a855f7',   // Purple
+      'oklch(0.624 0.2 263.9)': '#8b5cf6',  // Violet
+      'oklch(0.704 0.158 29.2)': '#ff6b35', // OrangeDark
+      'oklch(0.54 0.05 250.8)': '#e2e8f0',  // Slate-200
+      'oklch(0.699 0.11 148)': '#6ee7b7',   // Emerald-300
+      // Tailwind v4 oklab variants
+      'oklab(0.5 -0.1 0.1)': '#6b7280',     // Gray-500
+      'oklab(0.7 -0.05 0.05)': '#d1d5db',   // Gray-300
+      'oklab(0.9 -0.02 0.02)': '#f3f4f6',   // Gray-100
+      'oklab(0.95 0 0)': '#f9fafb',         // Gray-50
+      'oklab(0.3 0 0)': '#1f2937',          // Gray-800
+      'oklab(0.4 0 0)': '#374151',          // Gray-700
+      'oklab(0.6 0 0)': '#9ca3af',          // Gray-400
+      'oklab(0.8 0 0)': '#e5e7eb',          // Gray-200
+      'oklab(0.2 0 0)': '#111827',          // Gray-900
+    };
+    
+    for (const [key, hex] of Object.entries(colorMap)) {
+      if (colorStr.includes(key)) return hex;
+    }
+    
+    // Generic fallback: try to extract lightness
+    if (colorStr.includes('oklch')) {
+      const match = colorStr.match(/oklch\(([0-9.]+)\s/);
+      if (match) {
+        const lightness = parseFloat(match[1]);
+        if (lightness > 0.9) return '#f8fafc';
+        if (lightness > 0.7) return '#f1f5f9';
+        if (lightness > 0.5) return '#cbd5e1';
+        return '#1e293b';
+      }
+    }
+    
+    if (colorStr.includes('oklab')) {
+      const match = colorStr.match(/oklab\(([0-9.]+)\s/);
+      if (match) {
+        const lightness = parseFloat(match[1]);
+        if (lightness > 0.9) return '#f9fafb';
+        if (lightness > 0.7) return '#e5e7eb';
+        if (lightness > 0.5) return '#9ca3af';
+        return '#374151';
+      }
+    }
+    
+    return '#ffffff';
+  };
+
+  const generatePDF = async () => {
+    if (!presentationRef.current || !reportData) return;
+    setGeneratingPDF(true);
+    try {
+      // Get ALL stylesheet content and replace oklch/oklab with hex
+      let allCSS = '';
+      const styles = document.querySelectorAll('style');
+      styles.forEach(s => {
+        let text = s.textContent || '';
+        text = text.replace(/oklch\([^)]*\)/g, (m) => oklchToHex(m));
+        text = text.replace(/oklab\([^)]*\)/g, (m) => oklchToHex(m));
+        allCSS += text + '\n';
+      });
+      
+      const links = document.querySelectorAll('link[rel="stylesheet"]');
+      const linkPromises = Array.from(links).map(async (link) => {
+        try {
+          const href = (link as HTMLLinkElement).href;
+          const resp = await fetch(href);
+          let text = await resp.text();
+          text = text.replace(/oklch\([^)]*\)/g, (m: string) => oklchToHex(m));
+          text = text.replace(/oklab\([^)]*\)/g, (m: string) => oklchToHex(m));
+          return text;
+        } catch { return ''; }
+      });
+      
+      const externalCSS = await Promise.all(linkPromises);
+      allCSS += externalCSS.join('\n');
+      
+      // Build report content manually from reportData
+      const buildHeatMapRows = () => {
+        if (!reportData.heatMap?.length) return '<tr><td colspan="5" style="text-align:center;padding:40px;color:#94a3b8;">No process area findings to display</td></tr>';
+        return reportData.heatMap.map((row: any) => {
+          const getBg = (val: number) => {
+            if (val === 0) return 'background:#f8fafc;color:#94a3b8';
+            if (val > 10) return 'background:#ffe4e6;color:#881337;font-weight:700';
+            if (val > 4) return 'background:#fef3c7;color:#92400e;font-weight:700';
+            return 'background:#eff6ff;color:#1e40af;font-weight:600';
+          };
+          return `<tr style="border-bottom:1px solid #f1f5f9">
+            <td style="padding:16px;font-weight:600;color:#1e293b">${row.area}</td>
+            <td style="padding:16px;text-align:center"><span style="padding:6px 12px;border-radius:8px;font-size:14px;font-weight:700;${getBg(row.critical)}">${row.critical}</span></td>
+            <td style="padding:16px;text-align:center"><span style="padding:6px 12px;border-radius:8px;font-size:14px;font-weight:700;${getBg(row.high)}">${row.high}</span></td>
+            <td style="padding:16px;text-align:center"><span style="padding:6px 12px;border-radius:8px;font-size:14px;font-weight:700;${getBg(row.medium)}">${row.medium}</span></td>
+            <td style="padding:16px;text-align:center"><span style="padding:6px 12px;border-radius:8px;font-size:14px;font-weight:700;${getBg(row.low)}">${row.low}</span></td>
+          </tr>`;
+        }).join('');
+      };
+      
+      const buildFindingsRows = () => {
+        if (!reportData.topFindings?.length) return '<tr><td colspan="4" style="text-align:center;padding:40px;color:#94a3b8;">No findings available</td></tr>';
+        return reportData.topFindings.map((f: any, i: number) => {
+          const riskColors: Record<string, string> = {
+            'CRITICAL': 'background:#ffe4e6;color:#be123c;border:1px solid #fecdd3',
+            'HIGH': 'background:#ffe4e6;color:#be123c;border:1px solid #fecdd3',
+            'MEDIUM': 'background:#fef3c7;color:#b45309;border:1px solid #fde68a',
+          };
+          const rc = riskColors[f.riskLevel?.toUpperCase()] || 'background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe';
+          return `<tr style="border-bottom:1px solid #f1f5f9;${i%2===0?'background:#f8fafc':''}">
+            <td style="padding:16px;font-weight:700;color:#475569;text-align:center">#${i+1}</td>
+            <td style="padding:16px;font-weight:600;color:#1e293b">${f.title}</td>
+            <td style="padding:16px;text-align:center"><span style="padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;${rc}">${f.riskLevel}</span></td>
+            <td style="padding:16px;text-align:right;font-weight:700;color:#e11d48;font-size:18px">${f.count}</td>
+          </tr>`;
+        }).join('');
+      };
+      
+      const buildMaturityLevels = () => {
+        if (!reportData.maturity?.levels) return '';
+        return reportData.maturity.levels.map((lvl: any) => {
+          const isCurrent = Math.floor(reportData.maturity.score) === lvl.level;
+          const bg = isCurrent ? 'background:linear-gradient(135deg,#eef2ff,#dbeafe);border:1px solid #93c5fd;box-shadow:0 1px 3px rgba(0,0,0,0.1)' : 'background:#fff;border:1px solid #e2e8f0;color:#475569';
+          const circleBg = isCurrent ? 'background:#4f46e5;color:#fff' : 'background:#e2e8f0;color:#64748b';
+          return `<div style="display:flex;align-items:flex-start;gap:16px;padding:16px;border-radius:12px;margin-bottom:12px;${bg}">
+            <div style="width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0;${circleBg}">${lvl.level}</div>
+            <div>
+              <span style="font-size:14px;font-weight:700;color:${isCurrent?'#312e81':'#1e293b'}">${lvl.name}${isCurrent?' <span style="margin-left:8px;padding:4px 8px;border-radius:8px;background:#c7d2fe;color:#3730a3;font-size:10px;font-weight:900;text-transform:uppercase">Current</span>':''}</span>
+              <p style="font-size:14px;margin-top:4px;color:${isCurrent?'#4338ca':'#64748b'}">${lvl.desc}</p>
+            </div>
+          </div>`;
+        }).join('');
+      };
+      
+      const reportHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; margin:0; padding:0; box-sizing:border-box; }
+  @page { size: A4 landscape; margin: 15mm; }
+  body { font-family: 'Inter', system-ui, -apple-system, sans-serif; color: #1e293b; background: #fff; padding: 20px; }
+  .slide { page-break-after: always; min-height: 90vh; padding: 40px; border: 1px solid #e2e8f0; border-radius: 16px; margin-bottom: 20px; position: relative; overflow: hidden; }
+  .slide:last-child { page-break-after: avoid; }
+  .slide-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 24px; margin-bottom: 32px; }
+  .slide-badge { font-size: 12px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 2px; }
+  .slide-num { font-size: 18px; font-weight: 900; color: #4f46e5; background: #eef2ff; padding: 6px 12px; border-radius: 8px; border: 1px solid #c7d2fe; }
+  h2 { font-size: 30px; font-weight: 700; color: #0f172a; margin-bottom: 8px; }
+  h3 { font-size: 24px; font-weight: 700; color: #0f172a; }
+  .subtitle { color: #64748b; font-size: 14px; font-weight: 500; margin-bottom: 32px; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-bottom: 32px; }
+  .kpi-card { background: linear-gradient(135deg, #f8fafc, #fff); border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; text-align: center; }
+  .kpi-value { font-size: 36px; font-weight: 900; }
+  .kpi-label { font-size: 12px; font-weight: 700; color: #334155; margin-top: 8px; }
+  .kpi-sub { font-size: 11px; color: #64748b; margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #0f172a; color: #fff; font-size: 12px; font-weight: 700; text-transform: uppercase; padding: 16px; text-align: left; }
+  .roadmap-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .roadmap-card { border-radius: 16px; padding: 24px; position: relative; overflow: hidden; }
+  .roadmap-badge { display: inline-block; padding: 6px 12px; border-radius: 9999px; color: #fff; font-weight: 700; font-size: 12px; text-transform: uppercase; margin-bottom: 16px; }
+  .conclusion-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .conclusion-card { border-radius: 16px; padding: 24px; border: 2px solid; }
+  .cover-center { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; min-height: 70vh; }
+  .cover-logo { width: 80px; height: 80px; border-radius: 24px; background: linear-gradient(135deg, #4f46e5, #3b82f6); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 900; font-size: 30px; margin-bottom: 32px; }
+  .cover-title { font-size: 36px; font-weight: 900; color: #0f172a; max-width: 700px; line-height: 1.2; }
+  .cover-subtitle { font-size: 20px; font-weight: 700; color: #4f46e5; margin-top: 16px; }
+  .cover-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; border-top: 1px solid #cbd5e1; padding-top: 48px; margin-top: 64px; max-width: 500px; text-align: left; }
+  .info-box { background: linear-gradient(135deg, #eef2ff, #dbeafe); border: 1px solid #93c5fd; border-radius: 16px; padding: 20px; display: flex; gap: 16px; margin-top: 24px; }
+  .score-circle { width: 80px; height: 80px; border-radius: 16px; background: linear-gradient(135deg, #4f46e5, #3b82f6); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .progress-bar { width: 100%; height: 10px; background: #cbd5e1; border-radius: 9999px; overflow: hidden; margin-top: 12px; }
+  .progress-fill { height: 10px; border-radius: 9999px; background: linear-gradient(90deg, #4f46e5, #3b82f6); }
+  .footer-note { border-top: 1px solid #e2e8f0; padding-top: 24px; margin-top: auto; font-size: 12px; color: #64748b; display: flex; justify-content: space-between; }
+  .accent-circle { position: absolute; border-radius: 50%; filter: blur(40px); pointer-events: none; }
+</style>
+</head>
+<body>
+
+<!-- SLIDE 1: Cover -->
+<div class="slide">
+  <div class="accent-circle" style="width:128px;height:128px;background:rgba(99,102,241,0.05);top:0;right:0;"></div>
+  <div class="accent-circle" style="width:192px;height:192px;background:rgba(59,130,246,0.05);bottom:0;left:0;"></div>
+  <div class="cover-center">
+    <div class="cover-logo">GRC</div>
+    <h2 class="cover-title">SAP ECC & SAP ECP<br>Access Governance Audit</h2>
+    <p class="cover-subtitle">Board / Audit Committee Presentation</p>
+    <div style="margin-top:40px;padding:8px 24px;border-radius:9999px;background:#f1f5f9;border:1px solid #cbd5e1;font-size:12px;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:1px">Big Four Consulting Style</div>
+    <div class="cover-meta">
+      <div><span style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;display:block">Analysis Execution</span><span style="font-size:16px;font-weight:700;color:#1e293b;display:block;margin-top:4px">${reportData.run.run_name}</span></div>
+      <div><span style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;display:block">Run Date</span><span style="font-size:16px;font-weight:700;color:#1e293b;display:block;margin-top:4px">${formatDate(reportData.run.run_date)}</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 2: Executive Dashboard -->
+<div class="slide">
+  <div class="slide-header">
+    <div><span class="slide-badge">Board Audit Committee</span><h3>Executive Dashboard</h3><p class="subtitle" style="margin-bottom:0">High level security compliance metrics and critical exposure indicators.</p></div>
+    <div class="slide-num">2 / 8</div>
+  </div>
+  <div class="kpi-grid">
+    <div class="kpi-card"><div class="kpi-value" style="color:#ef4444">${reportData.kpis.sodRate}%</div><div class="kpi-label">SoD Conflict Rate</div><div class="kpi-sub">Segregation of Duties</div></div>
+    <div class="kpi-card"><div class="kpi-value" style="color:#f97316">${reportData.kpis.criticalAccessRate}%</div><div class="kpi-label">Critical Access</div><div class="kpi-sub">Privileged Exposure</div></div>
+    <div class="kpi-card"><div class="kpi-value" style="color:#64748b">${reportData.kpis.inactiveUsersRate}%</div><div class="kpi-label">Inactive Users</div><div class="kpi-sub">Access Cleanup</div></div>
+    <div class="kpi-card"><div class="kpi-value" style="color:#10b981">${reportData.kpis.complianceRate}%</div><div class="kpi-label">Compliance Rate</div><div class="kpi-sub">Policy Adherence</div></div>
+  </div>
+  <div style="background:linear-gradient(135deg,#f8fafc,#fff);border:1px solid #e2e8f0;border-radius:16px;padding:24px">
+    <div style="margin-bottom:20px">
+      <div style="font-size:14px;font-weight:700;color:#334155">Audit Finding Breakdown</div>
+      <div style="font-size:12px;color:#64748b;margin-top:4px">Risk classification by severity</div>
+    </div>
+    <div style="display:flex;gap:32px;align-items:flex-end;justify-content:center;padding:0 20px">
+      ${reportData.findingCounts?.map((fc: any, i: number) => {
+        const colors = ['#4f46e5','#ef4444','#f97316','#64748b'];
+        const maxVal = Math.max(...reportData.findingCounts.map((f:any)=>f.count), 1);
+        const barHeight = Math.max((fc.count / maxVal * 120), 8);
+        return `<div style="flex:1;max-width:120px;text-align:center;display:flex;flex-direction:column;align-items:center">
+          <div style="font-size:18px;font-weight:900;color:#1e293b;margin-bottom:8px">${fc.count}</div>
+          <div style="width:100%;height:${barHeight}px;background:${colors[i]};border-radius:8px 8px 0 0"></div>
+          <div style="font-size:12px;font-weight:600;color:#64748b;margin-top:12px;white-space:nowrap">${fc.name}</div>
+        </div>`;
+      }).join('') || ''}
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 3: Risk Heat Map -->
+<div class="slide">
+  <div class="slide-header">
+    <div><span class="slide-badge">Risk Analysis</span><h3>SoD Risk Heat Map</h3><p class="subtitle" style="margin-bottom:0">Cross-system conflict heat map grouped by functional business areas.</p></div>
+    <div class="slide-num">3 / 8</div>
+  </div>
+  <table style="border:1px solid #e2e8f0;border-radius:16px;overflow:hidden">
+    <thead><tr><th style="text-align:left">Functional Area</th><th style="text-align:center">Critical</th><th style="text-align:center">High</th><th style="text-align:center">Medium</th><th style="text-align:center">Low</th></tr></thead>
+    <tbody>${buildHeatMapRows()}</tbody>
+  </table>
+  <div class="info-box">
+    <div style="font-size:24px">⚠️</div>
+    <div><p style="font-size:14px;font-weight:700;color:#312e81">Heat Map Severity Guide</p><p style="font-size:14px;color:#4338ca;margin-top:8px">Heat map points are counted based on triggered rules. AP/Vendor conflicts typically occupy High/Critical risk ranges and require immediate mitigating controls.</p></div>
+  </div>
+</div>
+
+<!-- SLIDE 4: Module Distribution -->
+<div class="slide">
+  <div class="slide-header">
+    <div><span class="slide-badge">Access Analysis</span><h3>Critical Access Distribution by Module</h3><p class="subtitle" style="margin-bottom:0">Unique conflicting roles/users distribution across core modules.</p></div>
+    <div class="slide-num">4 / 8</div>
+  </div>
+  <div style="display:grid;grid-template-columns:3fr 2fr;gap:24px">
+    <div style="background:linear-gradient(135deg,#f8fafc,#fff);border:1px solid #e2e8f0;border-radius:16px;padding:24px">
+      ${reportData.moduleDistribution?.map((md: any, i: number) => {
+        const colors = ['#4f46e5','#3b82f6','#06b6d4','#10b981','#f59e0b'];
+        const maxVal = Math.max(...reportData.moduleDistribution.map((m:any)=>m.count), 1);
+        const w = Math.max((md.count / maxVal * 100), 0);
+        const showInside = w > 15;
+        return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <div style="width:60px;font-size:14px;font-weight:700;color:#1e293b;text-align:right">${md.name}</div>
+          <div style="flex:1;background:#f1f5f9;border-radius:9999px;height:24px;overflow:hidden;position:relative">
+            <div style="width:${w}%;min-width:${md.count > 0 ? '4px' : '0'};height:24px;background:${colors[i]};border-radius:9999px;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;font-size:12px;font-weight:700;color:#fff">${showInside ? md.count : ''}</div>
+          </div>
+          ${!showInside ? `<span style="font-size:13px;font-weight:700;color:#64748b;min-width:20px">${md.count}</span>` : ''}
+        </div>`;
+      }).join('') || ''}
+    </div>
+    <div>
+      <div style="background:linear-gradient(135deg,#fff1f2,#fecdd3);border:2px solid #fecdd3;border-radius:16px;padding:20px;margin-bottom:16px">
+        <div style="display:flex;gap:12px"><span style="font-size:20px">⚠️</span><div><span style="font-size:12px;font-weight:700;color:#be123c;text-transform:uppercase">Critical Module</span><div style="font-size:18px;font-weight:700;color:#881337;margin-top:4px">${reportData.moduleDistribution?.[0]?.name || 'FI'}</div><p style="font-size:12px;color:#be123c;margin-top:8px;font-weight:500">${reportData.moduleDistribution?.[0]?.count || 0} users with conflicting access</p></div></div>
+      </div>
+      <div style="background:linear-gradient(135deg,#eef2ff,#dbeafe);border:2px solid #93c5fd;border-radius:16px;padding:20px">
+        <div style="display:flex;gap:12px"><span style="font-size:20px">✅</span><div><span style="font-size:12px;font-weight:700;color:#4338ca;text-transform:uppercase">Immediate Action</span><p style="font-size:12px;color:#4338ca;margin-top:8px;font-weight:500">Restrict unnecessary profiles from ${reportData.moduleDistribution?.[0]?.name || 'Basis/FI'} to instantly drop conflict rates.</p></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 5: Maturity -->
+<div class="slide">
+  <div class="slide-header">
+    <div><span class="slide-badge">Governance Assessment</span><h3>Access Governance Maturity</h3><p class="subtitle" style="margin-bottom:0">Audit assessment of organizational risk management maturity.</p></div>
+    <div class="slide-num">5 / 8</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:24px;padding:24px;background:linear-gradient(135deg,#eef2ff,#dbeafe);border:1px solid #93c5fd;border-radius:16px;margin-bottom:24px">
+    <div class="score-circle"><span style="font-size:30px;font-weight:900">${reportData.maturity.score}</span><span style="font-size:10px;font-weight:700;text-transform:uppercase">/ 5.0</span></div>
+    <div style="flex:1">
+      <div style="font-size:18px;font-weight:700;color:#0f172a">Governance Maturity Rating</div>
+      <div style="font-size:14px;color:#475569;margin-top:4px;font-weight:500">Level: <span style="font-weight:700;color:#4f46e5">Level ${Math.floor(reportData.maturity.score)} - ${reportData.maturity.levels?.[Math.floor(reportData.maturity.score)-1]?.name || 'Defined'}</span></div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${(reportData.maturity.score/5)*100}%"></div></div>
+    </div>
+  </div>
+  ${buildMaturityLevels()}
+</div>
+
+<!-- SLIDE 6: Top Findings -->
+<div class="slide">
+  <div class="slide-header">
+    <div><span class="slide-badge">Audit Findings</span><h3>Top Findings</h3><p class="subtitle" style="margin-bottom:0">Audit identified findings requiring remediation priorities.</p></div>
+    <div class="slide-num">6 / 8</div>
+  </div>
+  <table style="border:1px solid #e2e8f0;border-radius:16px;overflow:hidden">
+    <thead><tr><th style="text-align:center;width:60px">ID</th><th>Finding Description</th><th style="text-align:center">Risk Level</th><th style="text-align:right">Count</th></tr></thead>
+    <tbody>${buildFindingsRows()}</tbody>
+  </table>
+</div>
+
+<!-- SLIDE 7: Roadmap -->
+<div class="slide">
+  <div class="slide-header">
+    <div><span class="slide-badge">Remediation Plan</span><h3>30 / 60 / 90 Day Remediation Roadmap</h3><p class="subtitle" style="margin-bottom:0">Recommended chronological framework to execute controls mitigation.</p></div>
+    <div class="slide-num">7 / 8</div>
+  </div>
+  <div class="roadmap-grid">
+    <div class="roadmap-card" style="background:linear-gradient(135deg,#eef2ff,rgba(199,210,254,0.5));border:2px solid #93c5fd">
+      <div style="position:absolute;top:16px;right:16px;font-size:60px;font-weight:900;color:#4f46e5;opacity:0.2">30</div>
+      <div class="roadmap-badge" style="background:#4f46e5">Days 0-30</div>
+      <h4 style="font-size:18px;font-weight:700;color:#0f172a;margin-bottom:12px">Immediate Remediation</h4>
+      <p style="font-size:14px;color:#334155;line-height:1.6;font-weight:500">${reportData.roadmap.days30}</p>
+    </div>
+    <div class="roadmap-card" style="background:linear-gradient(135deg,#eff6ff,rgba(191,219,254,0.5));border:2px solid #93c5fd">
+      <div style="position:absolute;top:16px;right:16px;font-size:60px;font-weight:900;color:#3b82f6;opacity:0.2">60</div>
+      <div class="roadmap-badge" style="background:#3b82f6">Days 31-60</div>
+      <h4 style="font-size:18px;font-weight:700;color:#0f172a;margin-bottom:12px">Access Redesign</h4>
+      <p style="font-size:14px;color:#334155;line-height:1.6;font-weight:500">${reportData.roadmap.days60}</p>
+    </div>
+    <div class="roadmap-card" style="background:linear-gradient(135deg,#ecfdf5,rgba(167,243,208,0.5));border:2px solid #6ee7b7">
+      <div style="position:absolute;top:16px;right:16px;font-size:60px;font-weight:900;color:#10b981;opacity:0.2">90</div>
+      <div class="roadmap-badge" style="background:#10b981">Days 61-90</div>
+      <h4 style="font-size:18px;font-weight:700;color:#0f172a;margin-bottom:12px">Governance Setup</h4>
+      <p style="font-size:14px;color:#334155;line-height:1.6;font-weight:500">${reportData.roadmap.days90}</p>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 8: Conclusion -->
+<div class="slide">
+  <div class="slide-header">
+    <div><span class="slide-badge">Final Review</span><h3>Executive Conclusion</h3><p class="subtitle" style="margin-bottom:0">Audit final report review, sign-off status and approval recommendations.</p></div>
+    <div class="slide-num">8 / 8</div>
+  </div>
+  <div class="conclusion-grid">
+    <div class="conclusion-card" style="background:linear-gradient(135deg,#fff1f2,#fecdd3);border-color:#fecdd3">
+      <span style="font-size:12px;font-weight:700;color:#475569;text-transform:uppercase;display:block">Overall Risk Posture</span>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:12px">
+        <span style="width:16px;height:16px;border-radius:50%;background:${reportData.conclusion.overallRisk==='Critical'||reportData.conclusion.overallRisk==='High'?'#ef4444':'#f59e0b'}"></span>
+        <span style="font-size:24px;font-weight:900;color:#0f172a">${reportData.conclusion.overallRisk} Risk</span>
+      </div>
+      <p style="font-size:14px;color:#334155;margin-top:16px;line-height:1.6;font-weight:500">${reportData.conclusion.remediationTarget}</p>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:24px;border-top:1px solid rgba(203,213,225,0.4);padding-top:16px">
+        <span style="font-size:14px;color:#475569;font-weight:600">Scope: <span style="font-weight:700">${reportData.run.scope_type}</span></span>
+      </div>
+    </div>
+    <div class="conclusion-card" style="background:linear-gradient(135deg,#eef2ff,#dbeafe);border-color:#93c5fd">
+      <span style="font-size:12px;font-weight:700;color:#475569;text-transform:uppercase;display:block">Sign-off Approval</span>
+      <h4 style="font-size:18px;font-weight:700;color:#0f172a;margin-top:12px">Committee Approval Status</h4>
+      <p style="font-size:14px;color:#334155;margin-top:12px;line-height:1.6;font-weight:500">Audit presentation report must be signed off by the lead GRC Auditor or Audit Committee chair to finalize remediation workflow.</p>
+      <div style="margin-top:24px;padding:12px;border-radius:12px;background:linear-gradient(135deg,#d1fae5,#a7f3d0);border:2px solid #6ee7b7;display:flex;align-items:center;justify-content:center;gap:8px;color:#065f46;font-size:14px;font-weight:700">
+        ✅ Report Approved & Signed Off
+      </div>
+    </div>
+  </div>
+  <div class="footer-note">
+    <span>${reportData.run.run_name} · By ${reportData.run.executed_by}</span>
+    <span>Generated: ${new Date().toLocaleDateString()}</span>
+  </div>
+</div>
+
+</body>
+</html>`;
+      
+      // Create iframe and write content
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.left = '-99999px';
+      iframe.style.top = '0';
+      iframe.style.width = '1200px';
+      iframe.style.height = '900px';
+      document.body.appendChild(iframe);
+      
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!iframeDoc) throw new Error('Could not access iframe document');
+      
+      iframeDoc.open();
+      iframeDoc.write(reportHTML);
+      iframeDoc.close();
+      
+      // Wait for iframe to render
+      await new Promise(r => setTimeout(r, 1500));
+      
+      // Trigger print
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      
+      // Clean up
+      setTimeout(() => {
+        if (document.body.contains(iframe)) {
+          document.body.removeChild(iframe);
+        }
+      }, 10000);
+      
+      console.log('PDF print dialog opened');
+    } catch (err: any) {
+      console.error('Error generating PDF:', err);
+      console.error('Details:', err?.message || err?.toString());
+      alert('Error generating PDF: ' + (err?.message || 'Unknown error occurred'));
+    } finally {
+      setGeneratingPDF(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header and Dropdown Selection */}
@@ -166,8 +580,19 @@ export const ExecutiveReport = () => {
           <p className="text-slate-500 text-sm mt-1">Audit Committee & Board level Access Governance Presentation.</p>
         </div>
 
-        {/* Selection menu */}
-        <div className="flex items-center gap-2">
+        {/* Selection menu and PDF button */}
+        <div className="flex items-center gap-3">
+          {reportData && (
+            <button
+              onClick={generatePDF}
+              disabled={generatingPDF}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white rounded-lg font-semibold text-sm transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Download className="w-4 h-4" />
+              {generatingPDF ? 'Generating...' : 'Download PDF'}
+            </button>
+          )}
+          <div className="flex items-center gap-2">
           {loadingRuns ? (
             <div className="flex items-center gap-2 text-slate-500 text-sm">
               <Loader2 className="w-4 h-4 animate-spin" /> Loading runs...
@@ -193,6 +618,7 @@ export const ExecutiveReport = () => {
               </div>
             </div>
           )}
+          </div>
         </div>
       </div>
 
@@ -216,7 +642,7 @@ export const ExecutiveReport = () => {
           <p className="text-slate-400 text-sm mt-1 max-w-sm mx-auto">An analysis execution must be completed in order to compile board level reports.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6" ref={presentationRef}>
           {/* Left Slide Navigation Deck */}
           <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm h-fit flex flex-col gap-2">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider px-3 mb-3 block letter-spacing-wide">Presentation Navigation</span>
