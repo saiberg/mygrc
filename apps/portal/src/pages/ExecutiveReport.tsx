@@ -524,7 +524,7 @@ export const ExecutiveReport = () => {
   </div>
   <div class="footer-note">
     <span>${reportData.run.run_name} · By ${reportData.run.executed_by}</span>
-    <span>Generated: ${new Date().toLocaleDateString()}</span>
+    <span>Generated: ${new Date().toLocaleDateString()} by MyGRC</span>
   </div>
 </div>
 

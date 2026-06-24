@@ -24,4 +24,16 @@ export class DashboardController {
   getHeatmap() {
     return this.dashboardService.getHeatmapData();
   }
+
+  @ApiOperation({ summary: 'Get recent analysis runs' })
+  @Get('recent-runs')
+  getRecentRuns() {
+    return this.dashboardService.getRecentRuns();
+  }
+
+  @ApiOperation({ summary: 'Get top conflicting rules' })
+  @Get('top-rules')
+  getTopRules() {
+    return this.dashboardService.getTopRules();
+  }
 }

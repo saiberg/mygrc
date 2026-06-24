@@ -33,6 +33,7 @@ export const RiskMatrix = () => {
   const [rules, setRules] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [collapsedLevels, setCollapsedLevels] = useState<Set<string>>(new Set());
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(DEFAULT_RULE_FORM);
@@ -123,6 +124,15 @@ export const RiskMatrix = () => {
   const removeItem = (i: number) => setItems(prev => prev.filter((_, idx) => idx !== i));
   const updateItem = (i: number, field: string, value: string) =>
     setItems(prev => prev.map((item, idx) => idx === i ? { ...item, [field]: value } : item));
+
+  const toggleLevel = (level: string) => {
+    setCollapsedLevels(prev => {
+      const next = new Set(prev);
+      if (next.has(level)) next.delete(level);
+      else next.add(level);
+      return next;
+    });
+  };
 
   // Group rules by risk level
   const rulesByLevel = RISK_LEVELS.reduce((acc, level) => {
@@ -280,19 +290,37 @@ export const RiskMatrix = () => {
           {RISK_LEVELS.map(level => {
             const levelRules = rulesByLevel[level];
             if (!levelRules || levelRules.length === 0) return null;
+            const isCollapsed = collapsedLevels.has(level);
             return (
               <div key={level} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                {/* Level header */}
-                <div className="flex items-center gap-3 px-5 py-3 bg-slate-50 border-b border-slate-100">
+                {/* Level header — clickable to collapse */}
+                <button
+                  onClick={() => toggleLevel(level)}
+                  className="w-full flex items-center gap-3 px-5 py-3 bg-slate-50 border-b border-slate-100 hover:bg-slate-100 transition-colors text-left"
+                >
+                  {isCollapsed
+                    ? <ChevronRight className="w-4 h-4 text-slate-400" />
+                    : <ChevronDown className="w-4 h-4 text-slate-400" />}
                   <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${riskBadge(level)}`}>{level}</span>
                   <span className="text-xs text-slate-400">{levelRules.length} rule{levelRules.length !== 1 ? 's' : ''}</span>
-                </div>
+                  <span className="flex-1" />
+                  <span className="text-[10px] text-slate-400 uppercase tracking-wide">{isCollapsed ? 'Click to expand' : 'Click to collapse'}</span>
+                </button>
 
-                {/* Rules */}
-                <div className="divide-y divide-slate-50">
-                  {levelRules.map((rule: any) => (
-                    <div key={rule.id_rule}>
-                      <div className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50 transition-colors">
+                {/* Rules list — animated collapse */}
+                <AnimatePresence initial={false}>
+                  {!isCollapsed && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="divide-y divide-slate-50">
+                        {levelRules.map((rule: any) => (
+                          <div key={rule.id_rule}>
+                            <div className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50 transition-colors">
                         {/* Expand toggle */}
                         <button onClick={() => setExpanded(expanded === rule.id_rule ? null : rule.id_rule)}
                           className="text-slate-400 hover:text-slate-600 transition-colors">
@@ -375,6 +403,9 @@ export const RiskMatrix = () => {
                     </div>
                   ))}
                 </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
               </div>
             );
           })}

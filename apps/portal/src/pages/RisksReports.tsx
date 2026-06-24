@@ -98,6 +98,7 @@ export const RisksReports = () => {
       const res = await fetch(`${API_BASE}/analysis-engine/runs/${id}/stats`);
       if (!res.ok) throw new Error('Failed to fetch statistics for the selected run.');
       const data = await res.json();
+      console.log('Stats API response:', JSON.stringify(data, null, 2));
       setStats(data);
     } catch (err: any) {
       console.error(err);
@@ -265,16 +266,18 @@ export const RisksReports = () => {
           {/* Visual Charts Row */}
           <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {/* Risk Distribution Chart */}
-            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col">
+            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
               <div className="flex items-center gap-2 mb-4">
                 <BarChart3 className="w-5 h-5 text-slate-400" />
                 <h3 className="font-semibold text-slate-700 text-sm">Findings by Risk Level</h3>
               </div>
-              <div className="flex-1 min-h-[260px] flex items-center justify-center">
+              <div style={{ width: '100%', height: 260 }}>
                 {stats.total === 0 ? (
-                  <span className="text-slate-400 text-sm">No findings generated in this run</span>
+                  <div className="h-full flex items-center justify-center">
+                    <span className="text-slate-400 text-sm">No findings generated in this run</span>
+                  </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height={260}>
+                  <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={stats.byRisk} barSize={40}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                       <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
@@ -295,16 +298,18 @@ export const RisksReports = () => {
             </div>
 
             {/* Status Distribution Pie Chart */}
-            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col">
+            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
               <div className="flex items-center gap-2 mb-4">
                 <TrendingUp className="w-5 h-5 text-slate-400" />
                 <h3 className="font-semibold text-slate-700 text-sm">Findings by Mitigation Status</h3>
               </div>
-              <div className="flex-1 min-h-[260px] flex items-center justify-center">
+              <div style={{ width: '100%', height: 260 }}>
                 {stats.total === 0 ? (
-                  <span className="text-slate-400 text-sm">No status data to display</span>
+                  <div className="h-full flex items-center justify-center">
+                    <span className="text-slate-400 text-sm">No status data to display</span>
+                  </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height={260}>
+                  <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={stats.byStatus.filter((s: any) => s.count > 0)}

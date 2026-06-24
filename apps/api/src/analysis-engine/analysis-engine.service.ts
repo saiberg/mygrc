@@ -51,13 +51,13 @@ export class AnalysisEngineService {
     // --- By risk level ---
     const byRisk = ['Critical', 'High', 'Medium', 'Low'].map(level => ({
       name: level,
-      count: findings.filter(f => f.risk_level === level).length,
+      count: findings.filter(f => f.risk_level.toUpperCase() === level.toUpperCase()).length,
     }));
 
     // --- By status ---
     const byStatus = ['Open', 'Mitigated', 'False Positive'].map(status => ({
       name: status,
-      count: findings.filter(f => f.finding_status === status).length,
+      count: findings.filter(f => f.finding_status.toUpperCase() === status.toUpperCase()).length,
     }));
 
     // --- Top users by conflict count (User-Based runs) ---
@@ -94,7 +94,7 @@ export class AnalysisEngineService {
     const topRules = [...ruleMap.values()].sort((a, b) => b.count - a.count).slice(0, 8);
 
     // --- Mitigation rate ---
-    const mitigated = findings.filter(f => f.finding_status === 'Mitigated').length;
+    const mitigated = findings.filter(f => f.finding_status?.toUpperCase() === 'MITIGATED').length;
     const mitigationRate = total > 0 ? Math.round((mitigated / total) * 100) : 0;
 
     return {
@@ -149,7 +149,7 @@ export class AnalysisEngineService {
     findings.forEach(f => {
       if (f.user) {
         usersWithConflicts.add(f.user.id_user);
-        if (f.risk_level === 'Critical' || f.risk_level === 'High') {
+        if (f.risk_level?.toUpperCase() === 'CRITICAL' || f.risk_level?.toUpperCase() === 'HIGH') {
           usersWithCriticalConflicts.add(f.user.id_user);
         }
       }
@@ -164,11 +164,11 @@ export class AnalysisEngineService {
     const inactiveUsersRate = totalUsers > 0 ? Number(((inactiveUsers / totalUsers) * 100).toFixed(1)) : 0;
     const complianceRate = Number((100 - sodRate).toFixed(1));
 
-    const mitigated = findings.filter(f => f.finding_status === 'Mitigated').length;
+    const mitigated = findings.filter(f => f.finding_status?.toUpperCase() === 'MITIGATED').length;
     const mitigationRate = totalFindings > 0 ? Math.round((mitigated / totalFindings) * 100) : 0;
 
     // Finding counts chart categories: SoD, Critical, Inactive, Obsolete
-    const criticalCount = findings.filter(f => f.risk_level === 'Critical' || f.risk_level === 'High').length;
+    const criticalCount = findings.filter(f => f.risk_level?.toUpperCase() === 'CRITICAL' || f.risk_level?.toUpperCase() === 'HIGH').length;
     const inactiveCount = findings.filter(f => f.user && !f.user.status).length;
     const obsoleteCount = inactiveRoles;
 
@@ -264,7 +264,7 @@ export class AnalysisEngineService {
 
     // Remediation Roadmap (30/60/90 Days)
     const highestRiskRule = Object.values(ruleGroups).sort((a, b) => b.count - a.count)[0];
-    const highRiskRules = Object.values(ruleGroups).filter(r => r.risk_level === 'Critical' || r.risk_level === 'High');
+const highRiskRules = Object.values(ruleGroups).filter(r => r.risk_level?.toUpperCase() === 'CRITICAL' || r.risk_level?.toUpperCase() === 'HIGH');
 
     const roadmap = {
       days30: highestRiskRule 
@@ -278,9 +278,9 @@ export class AnalysisEngineService {
 
     // Executive Conclusion
     let overallRisk = 'Low';
-    if (findings.some(f => f.risk_level === 'Critical')) overallRisk = 'Critical';
-    else if (findings.some(f => f.risk_level === 'High')) overallRisk = 'High';
-    else if (findings.some(f => f.risk_level === 'Medium')) overallRisk = 'Medium';
+    if (findings.some(f => f.risk_level?.toUpperCase() === 'CRITICAL')) overallRisk = 'Critical';
+    else if (findings.some(f => f.risk_level?.toUpperCase() === 'HIGH')) overallRisk = 'High';
+    else if (findings.some(f => f.risk_level?.toUpperCase() === 'MEDIUM')) overallRisk = 'Medium';
 
     return {
       run: {
