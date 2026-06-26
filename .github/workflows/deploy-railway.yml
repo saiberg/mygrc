@@ -1,19 +1,21 @@
-name: Deploy to Railway
+name: Deploy to Railway (Manual)
+
+# Railway auto-deploys on push via GitHub integration.
+# This workflow is only for manual redeploys when needed.
 
 on:
-  push:
-    branches:
-      - main
-      - master
-    paths-ignore:
-      - '*.md'
-      - 'scratch/**'
-      - '.vscode/**'
-  workflow_dispatch: # Allow manual triggers
+  workflow_dispatch: # Manual trigger only
+    inputs:
+      service:
+        description: 'Service to redeploy'
+        required: true
+        type: choice
+        options:
+          - api
+          - portal
+          - both
 
 jobs:
-  # Railway auto-deploys on push via GitHub integration.
-  # This job is a manual trigger to force redeploy if needed.
   redeploy:
     runs-on: ubuntu-latest
     environment: production
@@ -27,11 +29,13 @@ jobs:
           echo "$HOME/.railway/bin" >> $GITHUB_PATH
 
       - name: Redeploy API
+        if: ${{ github.event.inputs.service == 'api' || github.event.inputs.service == 'both' }}
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: railway service redeploy --service api
 
       - name: Redeploy Portal
+        if: ${{ github.event.inputs.service == 'portal' || github.event.inputs.service == 'both' }}
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: railway service redeploy --service portal
