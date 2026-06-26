@@ -5,13 +5,14 @@ on:
     branches:
       - main
       - master
+    paths-ignore:
+      - '*.md'
+      - 'scratch/**'
+      - '.vscode/**'
   workflow_dispatch: # Allow manual triggers
 
-env:
-  RAILWAY_API_URL: https://backboard.railway.app/graphql/v2
-
 jobs:
-  # Run database migrations first
+  # Run database migrations against Railway PostgreSQL
   migrate:
     runs-on: ubuntu-latest
     environment: production
@@ -24,26 +25,21 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install dependencies
-        run: |
-          cd apps/api
-          npm install
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: npm install
 
       - name: Generate Prisma client
-        run: |
-          cd apps/api
-          npx prisma generate
+        working-directory: apps/api
+        run: npx prisma generate
 
-      - name: Run Prisma migrations
+      - name: Run Prisma migrations on Railway DB
+        working-directory: apps/api
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: |
-          cd apps/api
-          npx prisma migrate deploy
-        # This runs pending migrations against the production DB
-        # Make sure DATABASE_URL is set in GitHub Secrets
+          DATABASE_URL: ${{ secrets.RAILWAY_DATABASE_URL }}
+        run: npx prisma migrate deploy
 
-  # Build and deploy API
+  # Build and deploy API service
   deploy-api:
     needs: migrate
     runs-on: ubuntu-latest
@@ -66,7 +62,7 @@ jobs:
             --detach \
             --wait
 
-  # Build and deploy Portal
+  # Build and deploy Portal service
   deploy-portal:
     needs: deploy-api
     runs-on: ubuntu-latest
@@ -89,7 +85,7 @@ jobs:
             --detach \
             --wait
 
-  # Notify on success
+  # Final status check
   notify:
     needs: [deploy-api, deploy-portal]
     runs-on: ubuntu-latest
@@ -98,7 +94,7 @@ jobs:
       - name: Deployment status
         run: |
           if [ "${{ needs.deploy-api.result }}" = "success" ] && [ "${{ needs.deploy-portal.result }}" = "success" ]; then
-            echo "✅ All services deployed successfully!"
+            echo "✅ All services deployed successfully to Railway!"
           else
             echo "❌ Deployment failed. Check the logs above."
             exit 1

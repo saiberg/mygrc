@@ -1,26 +1,5 @@
 services:
-  # PostgreSQL Database
-  db:
-    image: postgres:16-alpine
-    container_name: mygrc-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${DB_USER:-mygrc_user}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-mygrc_password}
-      POSTGRES_DB: ${DB_NAME:-mygrc_db}
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-mygrc_user} -d ${DB_NAME:-mygrc_db}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - mygrc-network
-
-  # NestJS API
+  # NestJS API — connects to your existing PostgreSQL on Docker Desktop
   api:
     build:
       context: .
@@ -31,11 +10,11 @@ services:
       - "${API_PORT:-3000}:3000"
     environment:
       PORT: "3000"
-      DATABASE_URL: "postgresql://${DB_USER:-mygrc_user}:${DB_PASSWORD:-mygrc_password}@db:5432/${DB_NAME:-mygrc_db}"
+      # Uses host.docker.internal to reach the host's PostgreSQL on port 5432
+      DATABASE_URL: "postgresql://${DB_USER:-mygrc_user}:${DB_PASSWORD:-mygrc_password}@host.docker.internal:5432/${DB_NAME:-mygrc_db}"
       NODE_ENV: production
-    depends_on:
-      db:
-        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - mygrc-network
 
@@ -52,9 +31,6 @@ services:
       - api
     networks:
       - mygrc-network
-
-volumes:
-  pgdata:
 
 networks:
   mygrc-network:
