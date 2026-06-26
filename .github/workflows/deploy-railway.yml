@@ -12,36 +12,9 @@ on:
   workflow_dispatch: # Allow manual triggers
 
 jobs:
-  # Run database migrations against Railway PostgreSQL
-  migrate:
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install API dependencies
-        working-directory: apps/api
-        run: npm install
-
-      - name: Generate Prisma client
-        working-directory: apps/api
-        run: npx prisma generate
-
-      - name: Run Prisma migrations on Railway DB
-        working-directory: apps/api
-        env:
-          DATABASE_URL: ${{ secrets.RAILWAY_DATABASE_URL }}
-        run: npx prisma migrate deploy
-
-  # Build and deploy API service
-  deploy-api:
-    needs: migrate
+  # Railway auto-deploys on push via GitHub integration.
+  # This job is a manual trigger to force redeploy if needed.
+  redeploy:
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -53,49 +26,12 @@ jobs:
           curl -fsSL https://railway.com/install.sh | sh
           echo "$HOME/.railway/bin" >> $GITHUB_PATH
 
-      - name: Deploy API to Railway
+      - name: Redeploy API
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: |
-          railway up \
-            --service api \
-            --detach \
-            --wait
+        run: railway service redeploy --service api
 
-  # Build and deploy Portal service
-  deploy-portal:
-    needs: deploy-api
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Railway CLI
-        run: |
-          curl -fsSL https://railway.com/install.sh | sh
-          echo "$HOME/.railway/bin" >> $GITHUB_PATH
-
-      - name: Deploy Portal to Railway
+      - name: Redeploy Portal
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: |
-          railway up \
-            --service portal \
-            --detach \
-            --wait
-
-  # Final status check
-  notify:
-    needs: [deploy-api, deploy-portal]
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Deployment status
-        run: |
-          if [ "${{ needs.deploy-api.result }}" = "success" ] && [ "${{ needs.deploy-portal.result }}" = "success" ]; then
-            echo "✅ All services deployed successfully to Railway!"
-          else
-            echo "❌ Deployment failed. Check the logs above."
-            exit 1
-          fi
+        run: railway service redeploy --service portal
