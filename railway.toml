@@ -1,0 +1,38 @@
+# Railway project configuration
+# This file tells Railway how to build and deploy each service
+
+[build]
+# Root-level build config (not used directly, services define their own)
+
+# ============ API Service ============
+[service.api]
+name = "api"
+dockerfilePath = "apps/api/Dockerfile"
+
+[service.api.healthcheck]
+path = "/api"
+timeout = 10
+interval = 30
+
+# ============ Portal Service ============
+[service.portal]
+name = "portal"
+dockerfilePath = "apps/portal/Dockerfile"
+
+[service.portal.healthcheck]
+path = "/"
+timeout = 5
+interval = 30
+
+# ============ Database Service ============
+[service.db]
+name = "db"
+# Railway provides managed PostgreSQL, so we use their native service
+# No Dockerfile needed — Railway provisions it automatically
+
+# ============ Environment Variables ============
+[variables]
+# These are set in Railway dashboard, not here
+# DATABASE_URL = "${{Postgres.DATABASE_URL}}"
+# NODE_ENV = "production"
+# PORT = "3000"

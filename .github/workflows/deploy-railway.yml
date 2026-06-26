@@ -1,0 +1,105 @@
+name: Deploy to Railway
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch: # Allow manual triggers
+
+env:
+  RAILWAY_API_URL: https://backboard.railway.app/graphql/v2
+
+jobs:
+  # Run database migrations first
+  migrate:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          cd apps/api
+          npm install
+
+      - name: Generate Prisma client
+        run: |
+          cd apps/api
+          npx prisma generate
+
+      - name: Run Prisma migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          cd apps/api
+          npx prisma migrate deploy
+        # This runs pending migrations against the production DB
+        # Make sure DATABASE_URL is set in GitHub Secrets
+
+  # Build and deploy API
+  deploy-api:
+    needs: migrate
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: |
+          curl -fsSL https://railway.com/install.sh | sh
+          echo "$HOME/.railway/bin" >> $GITHUB_PATH
+
+      - name: Deploy API to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          railway up \
+            --service api \
+            --detach \
+            --wait
+
+  # Build and deploy Portal
+  deploy-portal:
+    needs: deploy-api
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: |
+          curl -fsSL https://railway.com/install.sh | sh
+          echo "$HOME/.railway/bin" >> $GITHUB_PATH
+
+      - name: Deploy Portal to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          railway up \
+            --service portal \
+            --detach \
+            --wait
+
+  # Notify on success
+  notify:
+    needs: [deploy-api, deploy-portal]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Deployment status
+        run: |
+          if [ "${{ needs.deploy-api.result }}" = "success" ] && [ "${{ needs.deploy-portal.result }}" = "success" ]; then
+            echo "✅ All services deployed successfully!"
+          else
+            echo "❌ Deployment failed. Check the logs above."
+            exit 1
+          fi
