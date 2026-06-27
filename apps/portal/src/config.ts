@@ -1,6 +1,7 @@
 // Dynamic API base URL based on environment
 // In production, uses the Railway public API URL
 // In development, use localhost
+// Version: 2.0 - Railway deploy
 const isProduction = typeof window !== 'undefined' && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1');
 
 export const API_BASE = isProduction
