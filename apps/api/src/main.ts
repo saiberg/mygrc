@@ -27,6 +27,7 @@ async function bootstrap() {
       'http://100.96.122.41:5173',
       'http://100.96.122.42:5173',
       'http://laptop-lur3k0l3.tailae45b6.ts.net:5173',
+      'https://portal-production-9dec.up.railway.app',
     ],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
