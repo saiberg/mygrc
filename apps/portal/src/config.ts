@@ -1,10 +1,10 @@
 // Dynamic API base URL based on environment
-// In production (Docker), nginx proxies /api → api:3000, so use relative path
-// In development, use the explicit URL
+// In production, uses the Railway public API URL
+// In development, use localhost
 const isProduction = typeof window !== 'undefined' && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1');
 
 export const API_BASE = isProduction
-  ? '/api'                                                                      // production: nginx reverse proxy
+  ? 'https://api-production-100e.up.railway.app/api'                            // production: Railway public API
   : 'http://localhost:3000/api';                                                // development
 
 // Uncomment one of these for specific environments:
