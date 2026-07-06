@@ -31,7 +31,7 @@ export const MasterData = () => {
   const [editingTrxId, setEditingTrxId] = useState<string | null>(null);
 
   // Form states
-  const [userForm, setUserForm] = useState({ user_code: '', full_name: '', email: '', source_system: '' });
+  const [userForm, setUserForm] = useState({ user_code: '', full_name: '', email: '', source_system: '', status: true });
   const [roleForm, setRoleForm] = useState({ role_name: '', role_desc: '', process_area: '', criticality: 'Medium', status: true });
   const [assignmentForm, setAssignmentForm] = useState({ id_user: '', id_role: '', assigned_at: new Date().toISOString().split('T')[0], valid_from: new Date().toISOString().split('T')[0], valid_to: '', status: true });
   const [trxForm, setTrxForm] = useState({ role_name: '', object: '', field: '', transaction: '' });
@@ -79,7 +79,7 @@ export const MasterData = () => {
       });
       if (!res.ok) throw new Error((await res.json()).message);
 
-      setUserForm({ user_code: '', full_name: '', email: '', source_system: '' });
+      setUserForm({ user_code: '', full_name: '', email: '', source_system: '', status: true });
       setEditing(null);
       showMessage('ok', isEdit ? 'User updated.' : 'User created.');
       fetchData();
@@ -192,7 +192,7 @@ export const MasterData = () => {
     }
     setEditing({ id: type === 'users' ? item.id_user : item.id_role, type });
     if (type === 'users') {
-      setUserForm({ user_code: item.user_code, full_name: item.full_name, email: item.email, source_system: item.source_system || '' });
+      setUserForm({ user_code: item.user_code, full_name: item.full_name, email: item.email, source_system: item.source_system || '', status: item.status });
     } else if (type === 'roles') {
       setRoleForm({ role_name: item.role_name, process_area: item.process_area, criticality: item.criticality, role_desc: item.role_desc || '', status: item.status });
     }
@@ -201,7 +201,7 @@ export const MasterData = () => {
   const cancelEdit = () => {
     setEditing(null);
     setEditingTrxId(null);
-    setUserForm({ user_code: '', full_name: '', email: '', source_system: '' });
+    setUserForm({ user_code: '', full_name: '', email: '', source_system: '', status: true });
     setRoleForm({ role_name: '', process_area: '', criticality: 'Medium', role_desc: '', status: true });
     setTrxForm({ role_name: '', object: '', field: '', transaction: '' });
   };
@@ -309,6 +309,13 @@ export const MasterData = () => {
                     />
                   </div>
                 ))}
+                <div className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <label className="text-xs font-medium text-slate-600">Status</label>
+                  <button type="button" onClick={() => setUserForm(p => ({ ...p, status: !p.status }))}
+                    className={`px-3 py-1 rounded text-[11px] font-bold uppercase transition-all ${userForm.status ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-slate-200 text-slate-500 border border-slate-300'}`}>
+                    {userForm.status ? 'Active' : 'Inactive'}
+                  </button>
+                </div>
                 <button type="submit" disabled={submitting}
                   className="w-full mt-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors disabled:opacity-50">
                   {submitting ? 'Saving...' : editing ? 'Update User' : 'Create User'}
