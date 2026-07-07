@@ -1,13 +1,19 @@
-name: Deploy to Railway (Manual)
+name: Deploy to Railway
 
-# Railway auto-deploys on push via GitHub integration.
-# This workflow is only for manual redeploys when needed.
+# Deploys to Railway on push to main and supports manual trigger
 
 on:
-  workflow_dispatch: # Manual trigger only
+  push:
+    branches: [main]
+    paths:
+      - 'apps/api/**'
+      - 'apps/portal/**'
+      - 'railway.toml'
+      - '.github/workflows/deploy-railway.yml'
+  workflow_dispatch:
     inputs:
       service:
-        description: 'Service to redeploy'
+        description: 'Service to deploy'
         required: true
         type: choice
         options:
@@ -16,7 +22,7 @@ on:
           - both
 
 jobs:
-  redeploy:
+  deploy:
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -29,14 +35,20 @@ jobs:
           curl -fsSL https://railway.com/install.sh | bash
           echo "${HOME}/.railway/bin" >> $GITHUB_PATH
 
-      - name: Redeploy API
-        if: ${{ github.event.inputs.service == 'api' || github.event.inputs.service == 'both' }}
+      - name: Deploy API
+        if: |
+          github.event_name == 'push' ||
+          github.event.inputs.service == 'api' ||
+          github.event.inputs.service == 'both'
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway service redeploy --service api --yes
+        run: railway up --service api --yes
 
-      - name: Redeploy Portal
-        if: ${{ github.event.inputs.service == 'portal' || github.event.inputs.service == 'both' }}
+      - name: Deploy Portal
+        if: |
+          github.event_name == 'push' ||
+          github.event.inputs.service == 'portal' ||
+          github.event.inputs.service == 'both'
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway service redeploy --service portal --yes
+        run: railway up --service portal --yes
