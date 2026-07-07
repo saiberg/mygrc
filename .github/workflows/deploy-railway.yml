@@ -26,8 +26,8 @@ jobs:
       - name: Install Railway CLI
         shell: bash
         run: |
-          curl -fsSL https://railway.com/install.sh | sh
-          echo "$HOME/.railway/bin" >> $GITHUB_PATH
+          curl -fsSL https://railway.com/install.sh | bash
+          echo "${HOME}/.railway/bin" >> $GITHUB_PATH
 
       - name: Redeploy API
         if: ${{ github.event.inputs.service == 'api' || github.event.inputs.service == 'both' }}
