@@ -33,10 +33,10 @@ jobs:
         if: ${{ github.event.inputs.service == 'api' || github.event.inputs.service == 'both' }}
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway service redeploy --service api
+        run: railway service redeploy --service api --yes
 
       - name: Redeploy Portal
         if: ${{ github.event.inputs.service == 'portal' || github.event.inputs.service == 'both' }}
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway service redeploy --service portal
+        run: railway service redeploy --service portal --yes
